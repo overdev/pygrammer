@@ -1,0 +1,148 @@
+.token  ;; common tokens
+BIN `[01_]`!
+OCT `[0-7_]`!
+DEC `[0-9_]`!
+HEX `[0-9a-fA-F_]`!
+ALPHA `[a-zA-Z_]`!
+ALNUM `[a-zA-Z0-9_]`!
+
+WHITESPACE `\s+`                    @wsp @skip  ;; mark as white space and ignore
+INLINE_COMMENT `//.*`               @ilc @skip  ;; mark as inline and ignore
+MULTILINE_COMMENT `(?s)/[*].*[*]/`  @mlc @skip  ;; mark as multiline and ignore
+
+FLOAT x`(DEC+\.DEC*|\.DEC+)`
+INTEGER x`((0[bB]BIN+|0[oO]OCT+|0[xX]HEX+)|DEC+)`
+WORD x`ALPHAALNUM*`                 ^KEYWORD ^TYPENAME ^MODIFIER
+.end
+
+.token: DELIM
+','
+';'
+':'
+"\'"
+'\"'
+'\('
+'\['
+'\{'
+'\)'
+'\]'
+'\}'
+.end
+
+.token: KEYWORD
+'if'
+'then'
+'else'
+'for'
+'do'
+'while'
+'continue'
+'break'
+.end
+
+.token: TYPENAME
+'bool'
+'int8'
+'int16'
+'int32'
+'int64'
+'float32'
+'float64'
+.end
+
+.token: OPERATOR
+'\+'
+'\-'
+'/'
+'\*'
+'\+='
+'\-='
+'%='
+'/='
+'&'
+'\|'
+'^'
+'!'
+'&='
+'\|='
+'^='
+'!='
+'>>'
+'<<'
+.end
+
+.token: MODIFIER
+'static'
+'const'
+'public'
+'protected'
+'private'
+'readonly'
+.end
+
+.rules
+
+Number
+    : FLOAT     => literal
+    | INTEGER   => literal
+    ;
+
+ConstDecl
+    : 'const' WORD ':' TYPENAME '=' Number ';'   => _ name _ type _ value
+    ;
+
+EnumMemberDecl
+    : WORD [ '=' Number ]   => name ( _ value )
+    ;
+
+EnumDecl
+    : 'enum' WORD '{' EnumMemberDecl ( ',' EnumMemberDecl )* '}'    => _ name _ *members ( _ *members ) _
+    ;
+
+ParamTypes
+    : TYPENAME ( ',' TYPENAME )*   => *types ( _ *types )
+    ;
+
+SignatureDecl
+    : 'signature' WORD ':' '(' ParamTypes? ')' TYPENAME ';'   => _ name _ _ parameters _ return _
+    ;
+
+ParameterDecl
+    : WORD ':' TYPENAME     => name _ type
+    ;
+
+ParametersDecls
+    : ParameterDecl ( ',' ParameterDecl )*  => *decls ( _  *decls )
+    ;
+
+TextRule
+    : WORD ( '+' | '-' ) WORD       => left operator right
+    ;
+
+ReturnStmt
+    : 'return' Number? ';'     => _ value _
+    ;
+
+Statement
+    : ReturnStmt    => stmt
+    ;
+
+Scope
+    : '{' Statement* '}'    => _ *stmts _
+    ;
+
+FunctionDecl
+    : WORD '(' ParametersDecls?  ')' ':' TYPENAME Scope     => name _ parameters _ _ return defn
+    ;
+
+Declaration
+    : ConstDecl     => decl
+    | EnumDecl      => decl
+    | SignatureDecl => decl
+    | FunctionDecl => decl
+    ;
+
+Program
+    : Declaration+   => *decls
+    ;
+.end
