@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "colorama=0.4.6"
+  "colorama==0.4.6"
 ]
 
 # dynamic = ["version", "description"]
@@ -37,8 +37,7 @@ Repository = "https://github.com/overdev/pygrammer.git"
 Changelog = "https://github.com/overdev/pygrammer/blob/master/CHANGELOG.md"
 
 [project.scripts]
-parse = "core.parser:parse"
-compose = "core.generator:compose"
+pygrammer = "pygrammer.__main__:main"
 
 # [project.gui-scripts]
 # spam-gui = "spam:main_gui"
