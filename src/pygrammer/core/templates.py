@@ -50,10 +50,10 @@ __all__ = [
     'TPL_SOURCE_CLASS_2',
 ]
 
-
 # endregion (exports)
 # ---------------------------------------------------------
 # region CONSTANTS & ENUMS
+
 
 TPL_WARNING = """# --------------------------------------------------------------------------------
 # WARNING: DO NOT MODIFY THIS FILE! OR DO MODIFY, BUT BEFORE YOU PRECEED:
@@ -148,7 +148,7 @@ VERB_LEVELS = {
 
 TPL_UTILITIES = """
 
-def snakefy(string: str) -> str:
+def snakefy(string: str) ->'str':
     lastchar = ''
     result = ''
 
@@ -364,7 +364,7 @@ class Source:
     verbosity: Verbosity = ERROR
 
     @property
-    def location(self) -> tuple[str, int, int, str]:
+    def location(self) ->'tuple[str, int, int, str]':
         ""\"Returns a 4-tuple containing the filename, line number, column, and line of code\"""
         consumed = len(self.contents) - len(self.current)
         consumed_lines = self.contents[0: consumed].split('\\n')
@@ -376,12 +376,12 @@ class Source:
         return self.filename, line_num, col_num, line
 
     @property
-    def index(self) -> int:
+    def index(self) ->'int':
         ""\"Gets or sets the current string index of the grammar contents\"""
         return len(self.contents) - len(self.current)
 
     @index.setter
-    def index(self, value: int) -> None:
+    def index(self, value: int) ->'None':
         ind = max(0, min(value, len(self.contents) - 1))
         self.current = self.contents[ind:]
 
@@ -392,13 +392,13 @@ class Source:
 TPL_SOURCE_CLASS_2 = """
             break
 
-    def expect_regex(self, regex: str, error_message: str | None = None) -> re.Match:
+    def expect_regex(self, regex: str, error_message: str | None = None) ->'re.Match':
         ""\"Tries to match regex and returns its match object. Prints an error otherwise.\"""
         if m := self.match_regex(regex):
             return m
         self.error(error_message or f"Expected '{regex}'")
 
-    def match_regex(self, regex: str, skip: bool = True) -> re.Match | None:
+    def match_regex(self, regex: str, skip: bool = True) ->'re.Match | None':
         ""\"Tries to match a regex, consumes it and returns its match object. Returns None otherwise.\"""
         if m := re.match(regex, self.current):
             val = m[0].replace('\\n', '\\n')
@@ -413,13 +413,13 @@ TPL_SOURCE_CLASS_2 = """
                 self.info(f"Match fail: {repr(regex)}", as_debug=True)
         return None
 
-    def is_regex(self, regex: str) -> bool:
+    def is_regex(self, regex: str) ->'bool':
         ""\"Returns whether a regex matches.\"""
         if re.match(regex, self.current):
             return True
         return False
 
-    def error(self, message: str, at: int | None = None) -> None:
+    def error(self, message: str, at: int | None = None) ->'None':
         ""\"Aborts with an error message.\"""
         if at is not None:
             self.index = at
@@ -432,7 +432,7 @@ TPL_SOURCE_CLASS_2 = """
         print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
         sys.exit(1)
 
-    def warning(self, message: str) -> None:
+    def warning(self, message: str) ->'None':
         ""\"Aborts with an error message.""\"
         file, lin, col, line = self.location
 
@@ -442,7 +442,7 @@ TPL_SOURCE_CLASS_2 = """
 
         print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
 
-    def info(self, message: str, localized: bool = True, as_debug: bool = False) -> None:
+    def info(self, message: str, localized: bool = True, as_debug: bool = False) ->'None':
         ""\"Prints an information message.""\"
         file, lin, col, line = self.location
 
@@ -458,7 +458,7 @@ TPL_SOURCE_CLASS_2 = """
         else:
             print(header, file=sys.stdout)
 
-    def success(self, message: str, localized: bool = True) -> None:
+    def success(self, message: str, localized: bool = True) ->'None':
         ""\"Prints an success message.\"""
         file, lin, col, line = self.location
 
@@ -472,8 +472,5 @@ TPL_SOURCE_CLASS_2 = """
             print(header, file=sys.stdout)
 
 """
-# endregion (constants)
-# ---------------------------------------------------------
-# region FUNCTIONS
 
-# endregion (functions)
+# endregion (constants)
