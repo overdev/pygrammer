@@ -221,7 +221,7 @@ class SourceComposer:
 
         self.dedent_and_add(f"]")
 
-    def multiline_dict(self, items: dict[str, str], name: 'str | None', inline: 'bool' = True):
+    def multiline_dict(self, items: 'dict[str, str]', name: 'str | None', inline: 'bool' = True):
         """Composes a dict literal from given items"""
         if name is not None:
             if inline:
@@ -537,7 +537,6 @@ def compose_def_body(suffix: 'str', docstring: 'str', const_name: 'str', regex_s
         composer.line(f"item = expect_{suffix}()")
         composer.line(f"return item['value']")
 
-
 # region TOKEN
 
 
@@ -549,7 +548,6 @@ def compose_tokendef(token_name: 'str', token: 'TokenDef'):
     regex_str: 'str' = f"'''{token.value}'''"
 
     compose_def_body(suffix, docstring, const_name, regex_str, token.match_index)
-
 
 # endregion (TOKEN)
 
@@ -701,6 +699,7 @@ def compose_group_inline(group: 'NodeGroup'):
     elif group.mode is GM_SEQUENTIAL:
         compose_group_sequential(group)
 
+
 def compose_group_optional(group: 'NodeGroup'):
     """Composes the code for a optional inline group"""
     composer.comment("Option group below")
@@ -757,12 +756,6 @@ def compose_group_sequential(group: 'NodeGroup'):
 
         else:
             compose_reference(item, 'capture', supress_init_one=True)
-
-    # compose_reference(group.refs[0], 'test', use_capture='item', test_chained=False)
-    # with composer.suite():
-    #     composer.line("continue")
-    # composer.line("break")
-
 
     if dedent_after_loop:
         composer.dedent_only()
@@ -871,6 +864,7 @@ def compose_reference(ref: 'GrammarNodeReference', action: 'str' = 'capture', **
                     composer.dedent_only(2)
                 else:
                     composer.line(mcall)
+
 
 def escape_token(tkn: 'str') ->'str':
     """Escapes characters that have meaning in regluar expressions"""
