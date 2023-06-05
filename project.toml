@@ -1,0 +1,47 @@
+[project]
+name = "pygrammer"
+version = "2023.0.0"
+description = "A pure Python recursive descent parser generator for non too-technical language grammars"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+keywords = ["parser", "recursive-descent", "parser-generator", "grammar", "BNF", "EBNF", "syntax", "programming-language"]
+authors = [
+  {name = "Jorge A. Gomes", email = "jorgegomes83@protonmail.com"}
+]
+maintainers = [
+  {name = "Jorge A. Gomes", email = "jorgegomes83@protonmail.com"}
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python"
+]
+
+dependencies = [
+  "colorama=0.4.6"
+]
+
+# dynamic = ["version", "description"]
+
+# [project.optional-dependencies]
+# gui = ["PyQt5"]
+# cli = [
+#   "rich",
+#   "click",
+# ]
+
+[project.urls]
+Homepage = "https://github.com/overdev/pygrammer"
+Documentation = "https://github.com/overdev/pygrammer/blob/master/DOCUMENTATION.md"
+Repository = "https://github.com/overdev/pygrammer.git"
+Changelog = "https://github.com/overdev/pygrammer/blob/master/CHANGELOG.md"
+
+[project.scripts]
+parse = "core.parser:parse"
+compose = "core.generator:compose"
+
+# [project.gui-scripts]
+# spam-gui = "spam:main_gui"
+
+# [project.entry-points."spam.magical"]
+# tomatoes = "spam:main_tomatoes"

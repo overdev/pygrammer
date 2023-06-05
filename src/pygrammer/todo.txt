@@ -1,0 +1,33 @@
+Features:
+    - Add 'forward:<key>' attribute to rules
+        Propagates the value of node[<key>] to any added item
+
+    - Add 'kind:<NODE_KIND>' attribute to rules
+        After matching, sets the node kind to <NODE_KIND> value
+
+    - add 'join' directive to rules
+        Same as 'merge' expect it doesn't change the destination node's kind and location
+
+    - add 'file', 'filename', 'absdir', 'reldir' directive to rules
+        adds the source file name, base name, absolute and relative directory paths to the node
+
+    - add @relfilepath to token definitions
+        after match, checks if the value is a file path and is relative
+
+    - add @absfilepath to token definitions
+        after match, checks if the value is a file path and is absolute
+
+    - add @reldirpath to token definitions
+        after match, checks if the value is a directory path and is relative
+
+    - add @absdirpath to token definitions
+        after match, checks if the value is a directory path and is absolute
+
+
+
+
+
+
+
+
+
