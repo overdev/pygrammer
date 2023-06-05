@@ -66,6 +66,7 @@ __all__ = [
 
 
 class GroupMode(IntEnum):
+    """GroupMode defines how items in an inline group should be treated"""
     SEQUENTIAL = auto()
     ALTERNATIVE = auto()
     OPTIONAL = auto()
@@ -77,6 +78,7 @@ GM_OPTIONAL = GroupMode.OPTIONAL
 
 
 class NodeCount(IntEnum):
+    """NodeCount defined the possible number of ocorrences of an item (token or rule) or group"""
     ZERO_OR_ONE = auto()
     ZERO_OR_MORE = auto()
     ONE = auto()
@@ -95,105 +97,123 @@ NC_ONE_OR_MORE = NodeCount.ONE_OR_MORE
 
 
 class GrammarNode:
-    """Base for terminals and rules"""
+    """Base for tokens and rules"""
 
-    def __str__(self) -> str:
+    def __str__(self) ->'str':
         return self.__class__.__name__
 
 # region DEFINITIONS
 
 
 class GrammarNodeDefinition(GrammarNode):
+    """Base for token and rule definitions"""
 
-    def __init__(self, name: str):
+    def __init__(self, name: 'str'):
         super().__init__()
-        self._index: int = 0
-        self.name: str = name
+        self._index: 'int' = 0
+        self.name: 'str' = name
 
 
 class TokenDef(GrammarNodeDefinition):
+    """Represents a token definition"""
 
-    def __init__(self, name: str, value: str, is_regex: bool = True, excludes: list[str] | None = None,
-                 decorators: list[str] | None = None, match_group_index: int = 0):
+    def __init__(self, name: 'str', value: 'str', is_regex: 'bool' = True, excludes: 'list[str] | None' = None,
+                 decorators: 'list[str] | None' = None, match_group_index: 'int' = 0):
         super().__init__(name)
-        self.value: str = value
-        self._is_regex: bool = is_regex
-        self._excludes: list[str] | None = excludes
-        self._decorators: list[str] | None = decorators
-        self._match_index: int = match_group_index
+        self.value: 'str' = value
+        self._is_regex: 'bool' = is_regex
+        self._excludes: 'list[str] | None' = excludes
+        self._decorators: 'list[str] | None' = decorators
+        self._match_index: 'int' = match_group_index
 
     @property
-    def is_regex(self) -> bool:
+    def is_regex(self) -> 'bool':
+        "Gets the token regular expression"
         return self._is_regex
 
     @property
-    def match_index(self) -> int:
+    def match_index(self) ->'int':
+        """Gets the token's regular expression matching group index"""
         return self._match_index
 
-    def has_decorator(self, decorator: str) -> bool:
+    def has_decorator(self, decorator: 'str') ->'bool':
+        """Returns whether the token definition has the specified decorator"""
         return decorator in self._decorators
 
-    def excludes_kind(self, token_kind: str) -> bool:
+    def excludes_kind(self, token_kind: 'str') ->'bool':
+        """Returns whether the token definition excludes the specified token group"""
         return token_kind in self._excludes
 
-    def exclusions(self, token_kind: str) -> list[str]:
+    def exclusions(self, token_kind: 'str') ->'list[str]':
+        """Returns the token grops this definition excludes"""
         return self._excludes
 
 
 class KindDef(GrammarNodeDefinition):
+    """Represents a Token Group definition"""
 
-    def __init__(self, name: str, values: str):
+    def __init__(self, name: 'str', values: 'str'):
         super().__init__(name)
-        self.values: list[str] = values
-        self._is_regex: bool = True
-        self._is_group: bool = len(values) > 1
+        self.values: 'list[str]' = values
+        self._is_regex: 'bool' = True
+        self._is_group: 'bool' = len(values) > 1
 
     @property
-    def is_regex(self) -> bool:
+    def is_regex(self) ->'bool':
+        """Gets whether the group values are regular expressions (defaults to True)"""
         return self._is_regex
 
     @property
-    def is_group(self) -> bool:
+    def is_group(self) ->'bool':
+        """Gets whether the token group has more than one value"""
         return self._is_group
 
 
 class RuleDef(GrammarNodeDefinition):
+    """Represents a Rule definition"""
 
-    def __init__(self, name: str, source_index: int):
+    def __init__(self, name: 'str', source_index: 'int'):
         super().__init__(name)
-        self.entries: Sequence[NodeGroup] = []
-        self.node: dict[str, Any] = { 'node_kind': name.upper() }
-        self.attributes: dict[str, str] = {}
-        self.directives: list[str] = []
-        # self.is_simple: bool = True
+        self.entries: 'Sequence[NodeGroup]' = []
+        self.node: 'dict[str, Any]' = { 'node_kind': name.upper() }
+        self.attributes: 'dict[str, str]' = {}
+        self.directives: 'list[str]' = []
+        # self.is_simple: 'bool' = True
         self._index = source_index
 
     @property
-    def index(self) -> int:
+    def index(self) ->'int':
+        """Gets the character index in the grammar file where the rule occurs"""
         return self._index
 
     @property
-    def is_alternative(self) -> bool:
+    def is_alternative(self) ->'bool':
+        """Gets whether the rule has more than one definition"""
         return len(self.entries) > 1
 
     @property
-    def has_scope(self) -> bool:
+    def has_scope(self) ->'bool':
+        """Gets whether the rule has the `scope` attribute"""
         return 'scope' in self.attributes
 
     @property
-    def has_key(self) -> bool:
+    def has_key(self) ->'bool':
+        """Gets whether the rule has the `key` attribute"""
         return 'key' in self.attributes
 
     @property
-    def key(self) -> str | None:
+    def key(self) ->'str | None':
+        """Gets the rule `key` attribute value"""
         return self.attributes.get('key')
 
     @property
-    def scope(self) -> str | None:
+    def scope(self) ->'str | None':
+        """Gets the rule `scope` attribute value"""
         return self.attributes.get('scope')
 
     @property
     def is_simple(self):
+        """Returns whether the rule has one (simple) or more (complex) definitions"""
         if self.is_alternative:
             return isinstance(self.entries[0].first, (TokenRef, KindRef))
         else:
@@ -202,29 +222,35 @@ class RuleDef(GrammarNodeDefinition):
                     return False
         return True
 
-    def add_entry(self, name: str | None = None) -> 'NodeGroup':
+    def add_entry(self, name: 'str | None' = None) -> 'NodeGroup':
+        """Adds an entry (alternative definition) to the rule"""
         new_entry = NodeGroup(GM_SEQUENTIAL, NC_ONE, self)
         if name:
             new_entry.capture = name
         self.entries.append(new_entry)
         return new_entry
 
-    def has(self, attr: str) -> bool:
+    def has(self, attr: 'str') ->'bool':
+        """Returns whether the rule has the specified attribute `attr`"""
         return attr in self.attributes
 
-    def has_directive(self, directive: str) -> bool:
+    def has_directive(self, directive: 'str') ->'bool':
+        """Returns whether the rule has the specified directive"""
         return directive in self.directives
 
-    def get(self, attr: str, default=None) -> bool:
+    def get(self, attr: 'str', default=None) ->'bool':
+        """Returns the specified directive value, or None otherwise"""
         return self.attributes.get(attr, default)
 
-    def add_attribute(self, attrib_key: str, value: str) -> bool:
+    def add_attribute(self, attrib_key: 'str', value: 'str') ->'bool':
+        """Adds an attribute to the rule"""
         if attrib_key not in self.attributes:
             self.attributes[attrib_key] = value
             return True
         return False
 
-    def add_directive(self, directive: str) -> bool:
+    def add_directive(self, directive: 'str') ->'bool':
+        """Adds an directive to the rule"""
         if directive not in self.attributes:
             self.directives.append(directive)
             return True
@@ -232,23 +258,24 @@ class RuleDef(GrammarNodeDefinition):
 
 
 class NodeGroup:
+    """Represents a group of grammar node references or inline groups"""
 
-    def __init__(self, mode: GroupMode, count: NodeCount, parent: 'RuleDef | None' = None):
-        self._parent: RuleDef | None = parent
-        self.mode: GroupMode = mode
-        self.count: NodeCount = count
-        self.refs: Sequence[GrammarNodeReference | NodeGroup] = []
-        self.captures: Sequence[str] = []
-        self.capture: str = '_'
+    def __init__(self, mode: 'GroupMode', count: 'NodeCount', parent: 'RuleDef | None' = None):
+        self._parent: 'RuleDef | None' = parent
+        self.mode: 'GroupMode' = mode
+        self.count: 'NodeCount' = count
+        self.refs: 'Sequence[GrammarNodeReference | NodeGroup]' = []
+        self.captures: 'Sequence[str]' = []
+        self.capture: 'str' = '_'
         self.index = 0
 
-    def __str__(self) -> str:
+    def __str__(self) ->'str':
         return f"Group: (refs: {len(self.refs)}, mode: {self.mode.name}, count: {self.count.name}, entry: {self.parent is not None})"
 
-    def __len__(self) -> int:
+    def __len__(self) ->'int':
         return len(self.refs)
 
-    def __getitem__(self, key: int) -> 'tuple[GrammarNodeReference | NodeGroup, str | Sequence[str]]':
+    def __getitem__(self, key: 'int') -> 'tuple[GrammarNodeReference | NodeGroup, str | Sequence[str]]':
         if not isinstance(key, int):
             raise KeyError(f"key: {key}")
 
@@ -263,69 +290,73 @@ class NodeGroup:
 
     @property
     def first(self) -> 'GrammarNode | NodeGroup':
+        """Gets the first item in the group"""
         return self.refs[0]
 
     @property
-    def has_capture(self) -> bool:
+    def has_capture(self) ->'bool':
+        """Gets whether this group has defined a capture name"""
         return self.capture != '_'
 
     @property
     def parent(self) -> 'RuleDef | None':
+        """Gets the rule that owns the group, or None otherwise"""
         return self._parent
 
     def add_item(self, item: 'GrammarNodeReference', capture: 'str | Sequence[str] | None' = None):
+        """Adds a node reference to this group, along with its capture name(s)"""
         self.refs.append(item)
         self.captures.append('_' if not capture else capture)
 
-
-# endregion (DEFINITIONS)
+# endregion (definitions)
 
 # region REFERENCES
 
 
 class GrammarNodeReference(GrammarNode):
+    """Represents a reference to a Token or Rule definition"""
 
-    def __init__(self, value: str, count: NodeCount = NC_ONE):
+    def __init__(self, value: 'str', count: 'NodeCount' = NC_ONE):
         super().__init__()
-        self.value: str = value
-        self.count: NodeCount = count
-        self.capture: str = '_'
+        self.value: 'str' = value
+        self.count: 'NodeCount' = count
+        self.capture: 'str' = '_'
 
-    def __str__(self) -> str:
+    def __str__(self) ->'str':
         return f"{super().__str__()}: (value: {repr(self.value)}, count: {self.count.name}, capture: {repr(self.capture)})"
 
     @property
-    def has_capture(self) -> bool:
+    def has_capture(self) ->'bool':
+        """Gets whether this node has defined a capture name"""
         return self.capture != '_'
 
 
 class TokenRef(GrammarNodeReference):
+    """Represents a reference to a Token definition"""
 
-    def __init__(self, value: str, count: NodeCount = NC_ONE):
+    def __init__(self, value: 'str', count: 'NodeCount' = NC_ONE):
         super().__init__(value, count)
 
 
 class KindRef(GrammarNodeReference):
+    """Represents a reference to a Token Group definition"""
 
-    def __init__(self, kind_name: str, count: NodeCount = NC_ONE):
+    def __init__(self, kind_name: 'str', count: 'NodeCount' = NC_ONE):
         super().__init__(kind_name, count)
 
 
 class RuleRef(GrammarNodeReference):
+    """Represents a reference to a Rule definition"""
 
-    def __init__(self, rule_name: str, count: NodeCount = NC_ONE, source_index: int = 0):
+    def __init__(self, rule_name: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
         super().__init__(rule_name, count)
         self._index = source_index
 
     @property
-    def index(self) -> int:
+    def index(self) ->'int':
+        """Gets the character index in the grammar where this reference occurs"""
         return self._index
 
-
-# endregion (REFERENCES)
+# endregion (references)
 
 # endregion (classes)
-# ---------------------------------------------------------
-# region FUNCTIONS
-
-# endregion (functions)
