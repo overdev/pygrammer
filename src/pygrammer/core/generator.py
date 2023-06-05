@@ -36,7 +36,7 @@ from typing import Any, Sequence
 from contextlib import contextmanager
 from .grammar import *
 from .parser import *
-from .templates2 import *
+from .templates import *
 
 # endregion (imports)
 # ---------------------------------------------------------
@@ -54,54 +54,16 @@ __all__ = [
 
 
 composer: 'SourceComposer' = None
-grammar: GrammarNodes = None
-source: Source = None
+grammar: 'GrammarNodes' = None
+source: 'Source' = None
 
 # endregion (globals)
 # ---------------------------------------------------------
 # region CONSTANTS & ENUMS
 
+
 NEWLINE = '\n'
 INDENT = '    '
-
-REF_TEST = 'is'
-REF_PARSE = 'parse'
-REF_MATCH = 'match'
-REF_EXPECT = 'expect'
-
-CAP_ASSIGN = 'assign'
-CAP_SETITEM = 'setitem'
-CAP_APPEND = 'append'
-CAP_EXTEND = 'extend'
-CAP_UPDATE = 'update'
-CAP_LOOKUP = 'lookup'
-
-COND_NONE = 'nocondition'
-COND_IFTRUE = 'iftrue'
-COND_IFFALSE = 'iffalse'
-COND_IFITEM = 'ifitem'
-COND_IFNOTITEM = 'ifnotitem'
-COND_IFKEYINNODE = 'ifkeyinnode'
-COND_IFKEYNOTINNODE = 'ifkeynotinnode'
-ACTN_INITNODE = 'initnode'
-ACTN_INITITEM = 'inititem'
-ACTN_RESETNODE = 'resetnode'
-ACTN_TEST = 'is'
-ACTN_PARSE = 'parse'
-ACTN_MATCH = 'match'
-ACTN_EXPECT = 'expect'
-ACTN_ASSIGN = 'assign'
-ACTN_GETITEM = 'getitem'
-ACTN_APPEND = 'append'
-ACTN_EXTEND = 'extend'
-ACTN_UPDATE = 'update'
-ACTN_RETURN = 'return'
-ACTN_RETURNITEM = 'returnitem'
-ACTN_RETURNNODE = 'returnnode'
-ACTN_CONTINUE = 'continue'
-ACTN_BREAK = 'break'
-ACTN_FAIL = 'fail'
-
 
 # endregion (constants)
 # ---------------------------------------------------------
@@ -109,52 +71,64 @@ ACTN_FAIL = 'fail'
 
 
 class SourceComposer:
+    """Utility class to generate the parser code for the provided grammar"""
 
-    def __init__(self, output_filename: str):
-        self.output_filename: str = output_filename
-        self.output: str = ''
-        self.indent: int = 0
+    def __init__(self, output_filename: 'str'):
+        self.output_filename: 'str' = output_filename
+        self.output: 'str' = ''
+        self.indent: 'int' = 0
 
     @property
-    def indentation(self) -> str:
+    def indentation(self) -> 'str':
+        """Gets the ammount of space needed in the current indentation level"""
         return INDENT * self.indent
 
     def write(self):
+        """Writes the generated parser code into a file"""
         with open(self.output_filename, 'w', encoding='utf8') as fp:
             fp.write(self.output)
 
-    def empty(self, num: int = 1):
+    def empty(self, num: 'int' = 1):
+        """Adds one or more newlines to the output"""
         self.output += NEWLINE * num
 
-    def empty_indent(self, num: int = 1, lv: int = 1):
+    def empty_indent(self, num: 'int' = 1, lv: 'int' = 1):
+        """Adds one or more newlines to the output, then increases the indentation level"""
         self.output += NEWLINE * num
         self.indent += lv
 
-    def empty_dedent(self, num: int = 1, lv: int = 1):
+    def empty_dedent(self, num: 'int' = 1, lv: 'int' = 1):
+        """Adds one or more newlines to the output, then decreases the indentation level"""
         self.output += NEWLINE * num
         self.indent = max(0, self.indent - lv)
 
-    def indent_only(self, lv: int = 1):
+    def indent_only(self, lv: 'int' = 1):
+        """Increases the indentation level"""
         self.indent += lv
 
-    def dedent_only(self, lv: int = 1):
+    def dedent_only(self, lv: 'int' = 1):
+        """Decreases the indentation level"""
         self.indent = max(0, self.indent - lv)
 
-    def empty_reset(self, num: int = 1):
+    def empty_reset(self, num: 'int' = 1):
+        """Adds one or more newlines, then sets the indentation level to zero"""
         self.output += NEWLINE * num
         self.indent = 0
 
-    def inline(self, code: str):
+    def inline(self, code: 'str'):
+        """Appends the code string at the end of the output"""
         self.output += code
 
-    def line(self, code: str):
+    def line(self, code: 'str'):
+        """Adds a newline, then appends the code string at the end of the output following indentation"""
         if len(self.output) and self.output[-1] == NEWLINE:
             self.output += self.indentation
         else:
             self.output += NEWLINE + self.indentation
         self.output += code
 
-    def line_and_indent(self, code: str):
+    def line_and_indent(self, code: 'str'):
+        """Adds a newline, appends the code string at the end and increases indentation"""
         if len(self.output) and self.output[-1] == NEWLINE:
             self.output += self.indentation
         else:
@@ -162,63 +136,75 @@ class SourceComposer:
         self.output += code
         self.indent += 1
 
-    def line_and_dedent(self, code: str):
+    def line_and_dedent(self, code: 'str'):
+        """Adds a newline, appends the code string at the end and decreases indentation"""
         self.output += NEWLINE + self.indentation
         self.output += code
         self.indent -= max(0, self.indent - 1)
 
-    def line_and_reset(self, code: str):
+    def line_and_reset(self, code: 'str'):
+        """Adds a newline, appends the code string at the end and zeroes indentation"""
         self.output += NEWLINE + self.indentation
         self.output += code
         self.indent = 0
 
-    def add_and_reset(self, code: str):
+    def add_and_reset(self, code: 'str'):
+        """Appends the code string at the end and zeroes indentation"""
         self.output += code
         self.output += NEWLINE
         self.indent = 0
 
-    def add_and_indent(self, code: str):
+    def add_and_indent(self, code: 'str'):
+        """Appends the code string at the end and increases indentation"""
         self.output += code
         self.output += NEWLINE
         self.indent += 1
 
-    def add_and_dedent(self, code: str):
+    def add_and_dedent(self, code: 'str'):
+        """Appends the code string at the end and decreases indentation"""
         self.output += code
         self.output += NEWLINE
         self.indent = max(0, self.indent - 1)
 
-    def indent_and_add(self, code: str):
+    def indent_and_add(self, code: 'str'):
+        """Increases indentation, then appends the code string"""
         self.output += NEWLINE
         self.indent += 1
         self.output += code
 
-    def dedent_and_add(self, code: str):
+    def dedent_and_add(self, code: 'str'):
+        """Decreases indentation, then appends the code string"""
         self.indent = max(0, self.indent - 1)
         self.output += NEWLINE + self.indentation
         self.output += code
 
-    def reset_and_add(self, code: str):
+    def reset_and_add(self, code: 'str'):
+        """Zeroes indentation, then appends the code string"""
         self.indent = 0
         self.output += NEWLINE + self.indentation
         self.output += code
 
-    def dashed_line(self, length: int = 40):
+    def dashed_line(self, length: 'int' = 40):
+        """Adds a commented dashed line of given length (defaulting to 40)"""
         self.comment("-" * length)
 
-    def comment(self, text: str, inline: bool = False):
+    def comment(self, text: 'str', inline: 'bool' = False):
+        """Adds a comment"""
         comm = f"# {text}"
         if inline:
             self.inline(f"    {comm}")
         else:
             self.line(comm)
 
-    def docstring(self, text: str):
+    def docstring(self, text: 'str'):
+        """Adds the text wrapped in tripple quotation marks"""
         full = f'"""{text}"""'
         doc = full.split('\n')
         for line in doc:
             self.line(line)
 
-    def multiline_list(self, items: list[str], name: str | None, inline: bool = True):
+    def multiline_list(self, items: 'list[str]', name: 'str | None', inline: 'bool' = True):
+        """Composes a list literal from given items"""
         if name is not None:
             if inline:
                 self.add_and_indent(f"{name} = [")
@@ -235,7 +221,8 @@ class SourceComposer:
 
         self.dedent_and_add(f"]")
 
-    def multiline_dict(self, items: dict[str, str], name: str | None, inline: bool = True):
+    def multiline_dict(self, items: dict[str, str], name: 'str | None', inline: 'bool' = True):
+        """Composes a dict literal from given items"""
         if name is not None:
             if inline:
                 self.add_and_indent(f"{name} = {{")
@@ -252,7 +239,8 @@ class SourceComposer:
 
         self.dedent_and_add("}")
 
-    def template(self, tpl: str, *args, **kwargs):
+    def template(self, tpl: 'str', *args, **kwargs):
+        """Adds the template string to the output, correcting indentation"""
         try:
             formatted = tpl.format(*args, **kwargs) if len(args) > 0 or len(kwargs) > 0 else tpl
             for line in formatted.split(NEWLINE):
@@ -263,7 +251,8 @@ class SourceComposer:
         except Exception:
             self.comment("Failed to add template (formatting error)")
 
-    def template_exact(self, tpl: str, *args, **kwargs):
+    def template_exact(self, tpl: 'str', *args, **kwargs):
+        """Adds the template string to the output, keeping indentation as is"""
         indent = self.indent
         self.indent = 0
         try:
@@ -277,7 +266,8 @@ class SourceComposer:
         self.indent = indent
 
     @contextmanager
-    def suite(self, do_indent: bool = True, dedent_only: bool = True, lv: int = 1):
+    def suite(self, do_indent: 'bool' = True, dedent_only: 'bool' = True, lv: 'int' = 1):
+        """Context manager to compose an indented block of code"""
         if do_indent:
             self.empty_indent(lv=lv)
         yield
@@ -289,7 +279,8 @@ class SourceComposer:
 
 
     @contextmanager
-    def if_stmt(self, condition: str, inline: bool = False, dedent_only: bool = True):
+    def if_stmt(self, condition: 'str', inline: 'bool' = False, dedent_only: 'bool' = True):
+        """Context manager to compose an if statement"""
         if inline:
             self.add_and_indent(f"if {condition}:")
         else:
@@ -302,7 +293,8 @@ class SourceComposer:
 
 
     @contextmanager
-    def else_stmt(self, dedent_only: bool = True):
+    def else_stmt(self, dedent_only: 'bool' = True):
+        """Context manager to compose an else statement"""
         self.line_and_indent(f"else:")
         yield
         if dedent_only:
@@ -311,7 +303,8 @@ class SourceComposer:
             self.empty_dedent()
 
     @contextmanager
-    def while_stmt(self, condition: str, inline: bool = False, dedent_only: bool = True):
+    def while_stmt(self, condition: 'str', inline: 'bool' = False, dedent_only: 'bool' = True):
+        """Context manager to compose a while statement"""
         if inline:
             self.add_and_indent(f"while {condition}:")
         else:
@@ -323,7 +316,8 @@ class SourceComposer:
             self.empty_dedent()
 
     @contextmanager
-    def with_stmt(self, target: str, inline: bool = False, dedent_only: bool = True):
+    def with_stmt(self, target: 'str', inline: 'bool' = False, dedent_only: 'bool' = True):
+        """Context manager to compose a with statement"""
         if inline:
             self.add_and_indent(f"with {target}:")
         else:
@@ -335,15 +329,17 @@ class SourceComposer:
             self.empty_dedent()
 
     @contextmanager
-    def for_stmt(self, item: str, container: str):
+    def for_stmt(self, item: 'str', container: 'str'):
+        """Context manager to compose a for statement"""
         self.add_and_indent(f"for {item} in {container}:")
         yield
         self.empty_dedent()
 
     @contextmanager
-    def func_def(self, name: str, params: list[str], docstring: str | None,
-                 decorators: list[str] | None = None, empty_before: int = 1,
-                 empty_after: int = 1):
+    def func_def(self, name: 'str', params: 'list[str]', docstring: 'str | None',
+                 decorators: 'list[str] | None' = None, empty_before: 'int' = 1,
+                 empty_after: 'int' = 1):
+        """Context manager to compose a function definition"""
         if empty_before > 0:
             self.empty_reset(empty_before)
 
@@ -361,7 +357,8 @@ class SourceComposer:
             self.empty_reset(empty_after)
 
     @contextmanager
-    def region(self, label: str):
+    def region(self, label: 'str'):
+        """Context manager to compose a code region (code folding and organization)"""
         self.line(f"# region {label.upper()}")
         self.empty(2)
         yield
@@ -373,7 +370,8 @@ class SourceComposer:
 # region FUNCTIONS
 
 
-def snakefy(string: str) -> str:
+def snakefy(string: 'str') ->'str':
+    """Converts the string from PascalCase or ALL_CAPS to snake_case"""
     lastchar = ''
     result = ''
 
@@ -393,11 +391,12 @@ def snakefy(string: str) -> str:
     return result
 
 
-def compose(grammar_nodes: GrammarNodes, grammar_source: Source):
+def compose(grammar_nodes: 'GrammarNodes', grammar_source: 'Source'):
+    """Composes the parser for the grammar"""
     global composer, grammar, source
 
-    last_composer: SourceComposer = composer
-    last_grammar: GrammarNodes = grammar
+    last_composer: 'SourceComposer' = composer
+    last_grammar: 'GrammarNodes' = grammar
 
     grammar = grammar_nodes
     source = grammar_source
@@ -413,6 +412,7 @@ def compose(grammar_nodes: GrammarNodes, grammar_source: Source):
 
 
 def compose_parser():
+    """Composes the parser module"""
     with composer.region("header"):
         composer.template_exact(TPL_WARNING)
         composer.template_exact(TPL_LICENSE, year=2023, cr_owner="Jorge A. Gomes")
@@ -494,6 +494,7 @@ def compose_parser():
 
 
 def compose_token_definitions():
+    """Composes all token definitions"""
     with composer.region("token definitions"):
         for name, tokendef in grammar.tokens.items():
             if tokendef.has_decorator(DCR_INTERNAL) or tokendef.has_decorator(DCR_SKIP):
@@ -502,18 +503,21 @@ def compose_token_definitions():
 
 
 def compose_kind_definitions():
+    """Composes all token group definitions"""
     with composer.region("kind definitions"):
         for name, kinddef in grammar.kinds.items():
             compose_kinddef(name, kinddef)
 
 
 def compose_rule_definitions():
+    """Composes all rule definitions"""
     with composer.region("rule definitions"):
         for name, ruledef in grammar.rules.items():
             compose_ruledef(name, ruledef)
 
 
-def compose_def_body(suffix: str, docstring: str, const_name: str, regex_str: str, match_index: int):
+def compose_def_body(suffix: 'str', docstring: 'str', const_name: 'str', regex_str: 'str', match_index: 'int'):
+    """Composes the functions for parsing tokens"""
     with composer.func_def(f"is_{suffix}", [], docstring):
         composer.line(f"return source.is_regex(r{regex_str})")
 
@@ -537,11 +541,12 @@ def compose_def_body(suffix: str, docstring: str, const_name: str, regex_str: st
 # region TOKEN
 
 
-def compose_tokendef(token_name: str, token: TokenDef):
-    suffix: str = snakefy(token_name)
-    const_name: str = suffix.upper()
-    docstring: str = f'Parses a {token_name} token'
-    regex_str: str = f"'''{token.value}'''"
+def compose_tokendef(token_name: 'str', token: 'TokenDef'):
+    """Composes the functions for parsing a token definition"""
+    suffix: 'str' = snakefy(token_name)
+    const_name: 'str' = suffix.upper()
+    docstring: 'str' = f'Parses a {token_name} token'
+    regex_str: 'str' = f"'''{token.value}'''"
 
     compose_def_body(suffix, docstring, const_name, regex_str, token.match_index)
 
@@ -551,10 +556,11 @@ def compose_tokendef(token_name: str, token: TokenDef):
 # region KIND
 
 
-def compose_kinddef(kind_name: str, kind: KindDef):
-    suffix: str = snakefy(kind_name)
-    const_name: str = suffix.upper()
-    docstring: str = f'Parses a {kind_name} kind'
+def compose_kinddef(kind_name: 'str', kind: 'KindDef'):
+    """Composes the functions for parsing a token group definition"""
+    suffix: 'str' = snakefy(kind_name)
+    const_name: 'str' = suffix.upper()
+    docstring: 'str' = f'Parses a {kind_name} kind'
     values = '|'.join(kind.values)
     regex_str = f"'''{values}'''"
 
@@ -565,7 +571,7 @@ def compose_kinddef(kind_name: str, kind: KindDef):
 # region RULE
 
 
-def check_entry(entry: NodeGroup):
+def check_entry(entry: 'NodeGroup'):
     if not isinstance(entry.first, RuleRef):
         return
 
@@ -575,10 +581,11 @@ def check_entry(entry: NodeGroup):
             source.error("Rule entry cannot start with complex rule references")
 
 
-def compose_ruledef(rule_name: str, rule: RuleDef):
-    suffix: str = snakefy(rule_name)
-    docstring: str = f'Parses a {rule_name} rule'
-    node_kind: str = suffix.upper()
+def compose_ruledef(rule_name: 'str', rule: 'RuleDef'):
+    """Composes the functions for parsing a rule"""
+    suffix: 'str' = snakefy(rule_name)
+    docstring: 'str' = f'Parses a {rule_name} rule'
+    node_kind: 'str' = suffix.upper()
 
     with composer.func_def(f"expect_{suffix}", [], docstring):
         composer.line("loc = source.index")
@@ -661,7 +668,8 @@ def compose_ruledef(rule_name: str, rule: RuleDef):
 # region NODE GROUP
 
 
-def compose_group_entry(group: NodeGroup, rule: RuleDef, first: bool):
+def compose_group_entry(group: 'NodeGroup', rule: 'RuleDef', first: 'bool'):
+    """Composes the code for a rule alternative"""
 
     compose_reference(group.first, 'test', test_chained=not first)
 
@@ -678,7 +686,8 @@ def compose_group_entry(group: NodeGroup, rule: RuleDef, first: bool):
                 compose_group_inline(item)
 
 
-def compose_group_inline(group: NodeGroup):
+def compose_group_inline(group: 'NodeGroup'):
+    """Composes the code for a inline group"""
     for item in group.refs:
         if isinstance(item, GrammarNodeReference):
             compose_reference(item, 'init', supress_init_one=True)
@@ -692,7 +701,8 @@ def compose_group_inline(group: NodeGroup):
     elif group.mode is GM_SEQUENTIAL:
         compose_group_sequential(group)
 
-def compose_group_optional(group: NodeGroup):
+def compose_group_optional(group: 'NodeGroup'):
+    """Composes the code for a optional inline group"""
     composer.comment("Option group below")
     compose_reference(group.first, 'test', test_loop=False)
     with composer.suite():
@@ -704,7 +714,8 @@ def compose_group_optional(group: NodeGroup):
                 compose_group_inline(item)
 
 
-def compose_group_alternative(group: NodeGroup):
+def compose_group_alternative(group: 'NodeGroup'):
+    """Composes the code for a alternative inline group"""
     composer.comment("Alternative group below")
     dedent_after_loop = False
 
@@ -730,7 +741,8 @@ def compose_group_alternative(group: NodeGroup):
         composer.dedent_only()
 
 
-def compose_group_sequential(group: NodeGroup):
+def compose_group_sequential(group: 'NodeGroup'):
+    """Composes the code for a sequential inline group"""
     composer.comment("Sequential group below")
     dedent_after_loop = False
 
@@ -763,17 +775,18 @@ def compose_group_sequential(group: NodeGroup):
 # region REFERENCES
 
 
-def compose_reference(ref: GrammarNodeReference, action: str = 'capture', **kwargs):
-    has_cap: bool = ref.capture != '_'
-    many: bool = ref.capture.startswith('*') or ref.count in (NC_ONE_OR_MORE, NC_ZERO_OR_MORE)
-    opt: bool = ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE)
+def compose_reference(ref: 'GrammarNodeReference', action: 'str' = 'capture', **kwargs):
+    """Composes parsing operations referenced inside rules"""
+    has_cap: 'bool' = ref.capture != '_'
+    many: 'bool' = ref.capture.startswith('*') or ref.count in (NC_ONE_OR_MORE, NC_ZERO_OR_MORE)
+    opt: 'bool' = ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE)
     cap = kwargs.get("use_capture", ref.capture).lstrip('*')
-    should_merge_rule: bool = False
-    has_lookup: bool = False
+    should_merge_rule: 'bool' = False
+    has_lookup: 'bool' = False
     if '.' in cap:
         cap, lookup = cap.split('.', 2)
         has_lookup = True
-    initializer: str = '[]' if many else 'None'
+    initializer: 'str' = '[]' if many else 'None'
     test_chained = kwargs.get('test_chained', False)
     supress_init_one = kwargs.get('supress_init_one', False)
 
@@ -797,7 +810,7 @@ def compose_reference(ref: GrammarNodeReference, action: str = 'capture', **kwar
             composer.line(f"{stmt} is_{snakefy(ref.value)}():")
 
         elif isinstance(ref, RuleRef):
-            rule: RuleDef = grammar.get_rule(ref.value)
+            rule: 'RuleDef' = grammar.get_rule(ref.value)
             composer.line(f"{stmt} is_{snakefy(ref.value)}():")
 
     elif action == 'capture':
@@ -813,7 +826,7 @@ def compose_reference(ref: GrammarNodeReference, action: str = 'capture', **kwar
             mcall = f"match_{snakefy(ref.value)}()"
 
         elif isinstance(ref, RuleRef):
-            rule: RuleDef = grammar.get_rule(ref.value)
+            rule: 'RuleDef' = grammar.get_rule(ref.value)
             should_merge_rule = rule.has_directive('merge')
             source.info(f"{rule.name} should merge rule: {should_merge_rule} ({rule.get('update')}={cap})", localized=False, as_debug=should_merge_rule)
 
@@ -859,7 +872,8 @@ def compose_reference(ref: GrammarNodeReference, action: str = 'capture', **kwar
                 else:
                     composer.line(mcall)
 
-def escape_token(tkn: str) -> str:
+def escape_token(tkn: 'str') ->'str':
+    """Escapes characters that have meaning in regluar expressions"""
     return {
         r'(': r'\(',
         r'{': r'\{',
