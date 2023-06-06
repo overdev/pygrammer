@@ -216,5 +216,5 @@ As of now, pygrammer is not production-ready (it's planned to be only in v.1.0.0
 Install it with pip:
 
 ```
-$ pip install <link to the python wheel file>
+$ pip install https://github.com/overdev/pygrammer/releases/download/v0.1b1/pygrammer-0.1b1-py3-none-any.whl
 ```
