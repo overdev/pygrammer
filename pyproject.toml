@@ -1,6 +1,6 @@
 [project]
 name = "pygrammer"
-version = "0.1.0"
+version = "0.1beta1"
 description = "A pure Python recursive descent parser generator for non too-technical language grammars"
 readme = "README.md"
 requires-python = ">=3.8"
