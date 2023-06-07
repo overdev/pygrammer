@@ -45,6 +45,7 @@ __all__ = [
     'TPL_CONSTANTS',
     'TPL_GLOBALS',
     'TPL_UTILITIES',
+    'TPL_API',
     'TPL_MAIN',
     'TPL_SOURCE_CLASS_1',
     'TPL_SOURCE_CLASS_2',
@@ -93,6 +94,7 @@ TPL_LICENSE = """# -------------------------------------------------------------
 
 TPL_DEPENDENCIES = """import re
 import json
+import time
 
 from argparse import ArgumentParser, Namespace, FileType
 from colorama import just_fix_windows_console, Fore, Back, Style
@@ -202,7 +204,6 @@ def log(localized=False, **messages):
         else:
             continue
 
-        # print("verbosity <= source.verbosity:", verbosity <= source.verbosity)
         if verbosity <= source.verbosity:
             if verbosity is ERROR:
                 source.error(message)
@@ -280,55 +281,94 @@ def pop_verb(do_log=False):
             source.info(f"VERBOSITY: {verbosity_stack[-1].name.lower()} <- {source.verbosity.name.lower()}", False, False)
         source.verbosity = verbosity_stack.pop()
 
-def push_scope():
+def push_scope(just_checking=False):
     \"""Adds namespace behavior to the current node""\"
     global scope_stack, scopes_enabled
-    if scopes_enabled:
+    if not just_checking:
         scope_stack.append({})
 
-def pop_scope(node, name):
+def pop_scope(node, name, just_checking=False):
     \"""Assigns the current scope to the onwer node""\"
     global scope_stack, scopes_enabled
-    if scopes_enabled:
+    if not just_checking:
         if len(scope_stack):
             scope = scope_stack.pop()
             if node:
                 node[name] = scope
+                log(False, debug1=f"Scope assigned into node {node['kind']} under '{name}' key")
+                log(False, debug2=f"Scope has keys: {', '.join(scope.keys())}")
+                log(False, debug2=f"The {node['kind']} node has keys: {', '.join(node.keys())}")
+            else:
+                source.warning("No node to assign scope into")
         else:
             source.error("No scope to pop")
 
 def declare(identifier_key, node, kind):
     \"""Declares a node in the current scope""\"
     global scope_stack, scopes_enabled
-    if scopes_enabled:
-        if len(scope_stack):
-            scope = scope_stack[-1]
+    # if scopes_enabled:
+    if len(scope_stack):
+        scope = scope_stack[-1]
 
-            if not node:
-                source.warning(f"Fail to declare {kind} node: None")
-                return
+        if not node:
+            source.warning(f"Fail to declare {kind} node: None")
+            return
 
-            if not isinstance(identifier_key, str):
-                source.error("Invalid identifier_key type")
+        if not isinstance(identifier_key, str):
+            source.error("Invalid identifier_key type")
 
-            if identifier_key not in node:
-                source.warning(f"Failed to declare {kind} node: missing identifier key '{identifier_key}'")
-                return
+        if identifier_key not in node:
+            source.warning(f"Failed to declare {kind} node: missing identifier key '{identifier_key}'")
+            return
 
-            if name := node.get(identifier_key):
-                if not isinstance(name, str):
-                    source.error("Invalid node identifier type")
+        if name := node.get(identifier_key):
+            if not isinstance(name, str):
+                source.error("Invalid node identifier type")
 
-                if name in scope:
-                    source.error(f"Redeclared name in scope: {name}")
+            if name in scope:
+                source.error(f"Redeclared name in scope: {name}")
 
-                scope[name] = node
-                log(False, debug1=f"{node['kind']} declared")
-                log(False, success=f"{node['kind']} declared in scope as {name}")
-            else:
-                source.error(f"{node['kind']} has no {identifier_key} item")
+            scope[name] = node
+            log(False, debug1=f"{node['kind']} declared")
+            log(False, success=f"{node['kind']} declared in scope as {name}, having keys {', '.join(node.keys())}")
         else:
-            source.error("No active scope")
+            source.error(f"{node['kind']} has no {identifier_key} item")
+    else:
+        source.error("No active scope")
+
+"""
+
+TPL_API = """
+def parse(source_fname, output_ast_fname, start_rule, verbosity):
+    ""\"Parsers a source file and generates an abstract syntax tree of the source.\"""
+    global source
+
+    message = f"Started parsing file {source_fname}"
+    header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
+    print(header)
+
+    main_rule = f'match_{snakefy(start_rule)}'
+    rule_callback = globals().get(main_rule, lambda: { 'kind': 'NO_AST', 'message': f'{start_rule} not defined' })
+
+    message = f"Started parsing file {source_fname}"
+    header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
+    print(header)
+
+    with open(source_fname, 'r', encoding='utf8') as fp:
+        source_contents = fp.read()
+
+    source = Source(source_contents, source_contents, source_fname, VERB_LEVELS.get(verbosity, ERROR))
+    source.skip()
+
+    ptime = time.process_time()
+    ast = rule_callback()
+    delta = time.process_time() - ptime
+
+    message = f"Finished parsing file {source_fname} (took {delta:.4f} seconds)"
+    header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
+    print(header)
+
+    return ast
 
 """
 
@@ -338,19 +378,31 @@ parser = ArgumentParser()
 parser.add_argument('source', help="The source file path", type=FileType('r', encoding='utf8'))
 parser.add_argument('-o', '--out', help="The AST output file path", type=FileType('w', encoding='utf8'), required=True)
 parser.add_argument('-s', '--start', help="Set starting rule to parse", type=str, required=True)
-# parser.add_argument('-v', '--verbosity', help="Set the verbosity level", choices=['error', 'warning', 'debug1', 'success', 'debug2', 'info', 'debug3', 'all'], default='error')
+parser.add_argument('-v', '--verbosity', help="Set the verbosity level", choices=['error', 'warning', 'debug1', 'success', 'debug2', 'info', 'debug3', 'all'], default='error')
 
 args: Namespace = parser.parse_args()
 
-ast = parse(args.source.name, args.out.name, args.start)
+ast = parse(args.source.name, args.out.name, args.start, args.verbosity)
 
 if ast:
     try:
         json.dump(ast, args.out, indent=2)
+        done = True
     except Exception as e:
-        print(f"Failed to save ast into file: {' '.join(repr(arg) for arg in e.args)}")
+        done = False
+        message = f"Failed to save ast into file: {' '.join(repr(arg) for arg in e.args)}"
+        header = f"{Fore.BLACK}{Back.RED}ERROR: {Style.BRIGHT}{Fore.RED}{Back.BLACK} {message}{Style.RESET_ALL}"
+        print(header)
+
+    if done:
+        message = f"Saved AST into file: '{args.out.name}'"
+        header = f"{Fore.BLACK}{Back.GREEN}ERROR: {Style.BRIGHT}{Fore.GREEN}{Back.BLACK} {message}{Style.RESET_ALL}"
+        print(header)
 else:
-    print("Done without significative output")
+    message = "Done without significative output"
+    header = f"{Fore.BLACK}{Back.YELLOW}WARNING: {Style.BRIGHT}{Fore.YELLOW}{Back.BLACK} {message}{Style.RESET_ALL}"
+    print(header)
+
 return 0
 """
 
