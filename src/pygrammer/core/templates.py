@@ -350,10 +350,6 @@ def parse(source_fname, output_ast_fname, start_rule, verbosity):
     main_rule = f'match_{snakefy(start_rule)}'
     rule_callback = globals().get(main_rule, lambda: { 'kind': 'NO_AST', 'message': f'{start_rule} not defined' })
 
-    message = f"Started parsing file {source_fname}"
-    header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
-    print(header)
-
     with open(source_fname, 'r', encoding='utf8') as fp:
         source_contents = fp.read()
 
