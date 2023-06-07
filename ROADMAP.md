@@ -21,8 +21,11 @@
 ### Revisions
 
 - [ ] Review the code generation system to reduce the file size
+    - [x] `is_*()` functions for rules got way smaller, basically one-liners.
+- [ ] keep `node['some_list'] = []` from getting in the way of `@{key:some_item}` when no item is ever appended.
 - [ ] Review the logging system to fix the _log explosion_
 - [ ] Try to eliminate the limitations of the parser regarding complex rules, which cause noticiable bottlenecks
+    - [x] `is_*()` functions for rules don't cheat anymore by calling `match_*()` to see if it returns `None`.
 
 ### Documentation
 

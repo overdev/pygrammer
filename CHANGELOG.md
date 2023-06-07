@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Constant name typo `NC_ZERO_OR_MORE` in `compose_reference()`
 - Fixed code generation for inline groups in the form `( A | B | C )?`
+- Fixed parsing capture of inline groups where the inline group was including items after its delimiter
+
+### Changed
+
+- Code generated for testing rule matching (`is_*()`) got way simpler and faster, also causing a LOC reduction of up to 20%.
+- `parse()` moved to templates and shows better log messages
+
+### Added
+
+- CLI argument `-verbosity` or `-v` to generated parser module do define initial log verbosity level (Defaults to `error`)
 
 ## 0.1beta1 - 2023-06-05
 
