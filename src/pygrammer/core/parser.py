@@ -6,17 +6,17 @@
 #
 #
 # Copyright 2023 Jorge A. Gomes
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -46,26 +46,26 @@ from .grammar import *
 
 
 __all__ = [
-    'DECORATORS',
-    'DCR_WHITESPACE',
-    'DCR_LINECOMMENT',
-    'DCR_BLOCKCOMMENT',
-    'DCR_SKIP',
-    'DCR_EXPAND',
-    'DCR_INTERNAL',
-    'Verbosity',
-    'ERROR',
-    'WARNING',
-    'DEBUG1',
-    'SUCCESS',
-    'DEBUG2',
-    'INFO',
-    'DEBUG3',
-    'ALL',
-    'COUNT_MAP',
-    'GrammarNodes',
-    'Source',
-    'parse',
+    "DECORATORS",
+    "DCR_WHITESPACE",
+    "DCR_LINECOMMENT",
+    "DCR_BLOCKCOMMENT",
+    "DCR_SKIP",
+    "DCR_EXPAND",
+    "DCR_INTERNAL",
+    "Verbosity",
+    "ERROR",
+    "WARNING",
+    "DEBUG1",
+    "SUCCESS",
+    "DEBUG2",
+    "INFO",
+    "DEBUG3",
+    "ALL",
+    "COUNT_MAP",
+    "GrammarNodes",
+    "Source",
+    "parse",
 ]
 
 
@@ -74,23 +74,23 @@ __all__ = [
 # region GLOBALS
 
 
-grammar: 'Source | None' = None
+grammar: "Source | None" = None
 
 # endregion (globals)
 # ---------------------------------------------------------
 # region CONSTANTS & ENUMS
 
 
-RE_SPACE = r'''\s+'''
-RE_INLINE_COMM = r''';;.*[\n$]'''
-RE_MULTILINE_COMM = r'''(?s);[*].*?[*];'''
+RE_SPACE = r"""\s+"""
+RE_INLINE_COMM = r""";;.*[\n$]"""
+RE_MULTILINE_COMM = r"""(?s);[*].*?[*];"""
 
 RE_SECTION = r"""\.(\w+)(:\s*(\w+))?"""
 RE_TOKEN_NAME = r"""[_A-Z][_A-Z0-9]+"""
 RE_RULE_NAME = r"""([A-Z][a-zA-Z]*)+"""
 RE_RULE_ATTRIB = r"""@"""
 RE_TOKEN_VALUE = r"""`(.+?)`"""
-RE_TOKEN_ITEM = r"""(?P<quote>['"])(.*?)(?P=quote)"""
+RE_TOKEN_ITEM = r"""(?P<quote>[`'"])(.*?)(?P=quote)"""
 RE_DECORATOR = r"""@(\w+|[0-9])"""
 RE_EXCLUSION = r"""\^(\w+)"""
 RE_COLON = r""":"""
@@ -118,17 +118,17 @@ ERR_EXPECTED_PIPE = "Expected '|'"
 ERR_ATTRIB_KEY = "Expected rule attribute key"
 ERR_ATTRIB_VALUE = "Expected rule attribute value"
 
-SECTION_TOKEN = 'token'
-SECTION_RULE = 'rules'
-SECTION_END = r'\.end'
+SECTION_TOKEN = "token"
+SECTION_RULE = "rules"
+SECTION_END = r"\.end"
 
-DCR_WHITESPACE = 'whitespace'
-DCR_LINECOMMENT = 'linecomment'
-DCR_BLOCKCOMMENT = 'blockcomment'
-DCR_SKIP = 'skip'
-DCR_EXPAND = 'expand'
-DCR_INTERNAL = 'internal'
-DCR_GETTER = 'getter'
+DCR_WHITESPACE = "whitespace"
+DCR_LINECOMMENT = "linecomment"
+DCR_BLOCKCOMMENT = "blockcomment"
+DCR_SKIP = "skip"
+DCR_EXPAND = "expand"
+DCR_INTERNAL = "internal"
+DCR_GETTER = "getter"
 
 DECORATORS = [
     DCR_WHITESPACE,
@@ -141,14 +141,15 @@ DECORATORS = [
 ]
 
 COUNT_MAP = {
-    '?': NC_ZERO_OR_ONE,
-    '+': NC_ONE_OR_MORE,
-    '*': NC_ZERO_OR_MORE,
+    "?": NC_ZERO_OR_ONE,
+    "+": NC_ONE_OR_MORE,
+    "*": NC_ZERO_OR_MORE,
 }
 
 
 class Verbosity(IntEnum):
     """Represents the levels of information printed out by the parser"""
+
     ERROR = 0
     WARNING = auto()
     DEBUG1 = auto()
@@ -176,18 +177,19 @@ ALL = Verbosity.ALL
 @dataclass
 class GrammarNodes:
     """Represents the collection of tokens and rule definitions"""
+
     input_filename: str
     output_filename: str
-    tokens: 'dict[str, TokenDef]' = field(default_factory=dict)
-    kinds: 'dict[str, KindDef]' = field(default_factory=dict)
-    rules: 'dict[str, RuleDef]' = field(default_factory=dict)
-    node_names: 'list[str]' = field(default_factory=list)
+    tokens: "dict[str, TokenDef]" = field(default_factory=dict)
+    kinds: "dict[str, KindDef]" = field(default_factory=dict)
+    rules: "dict[str, RuleDef]" = field(default_factory=dict)
+    node_names: "list[str]" = field(default_factory=list)
 
-    def has_node(self, node: 'GrammarNodeDefinition') ->'bool':
+    def has_node(self, node: "GrammarNodeDefinition") -> "bool":
         """Returns whether the specified node is in the collection"""
         return node.name in self.node_names
 
-    def add(self, node: 'GrammarNodeDefinition') ->'bool':
+    def add(self, node: "GrammarNodeDefinition") -> "bool":
         """Adds the specified node to in the collection if it is not already added"""
         if self.has_node(node):
             return False
@@ -206,7 +208,7 @@ class GrammarNodes:
 
         return False
 
-    def get_rule(self, name: 'str') ->'RuleDef | None':
+    def get_rule(self, name: "str") -> "RuleDef | None":
         """Returns the rule definition with given name, or None otherwise"""
         return self.rules.get(name)
 
@@ -224,30 +226,31 @@ class GrammarNodes:
 @dataclass
 class Source:
     """Represents the contents of a source/text file"""
+
     contents: str
     current: str
     filename: str
-    verbosity: 'Verbosity' = ERROR
+    verbosity: "Verbosity" = ERROR
 
     @property
-    def location(self) ->'tuple[str, int, int, str]':
+    def location(self) -> "tuple[str, int, int, str]":
         """Returns a 4-tuple containing the filename, line number, column, and line of code"""
         consumed = len(self.contents) - len(self.current)
-        consumed_lines = self.contents[0: consumed].split('\n')
+        consumed_lines = self.contents[0:consumed].split("\n")
         line_num = len(consumed_lines)
         col_num = len(consumed_lines[-1]) + 1
-        remaining_line = self.current.split('\n')[0]
+        remaining_line = self.current.split("\n")[0]
         line = f"  {consumed_lines[-1]}{remaining_line}"
 
         return self.filename, line_num, col_num, line
 
     @property
-    def index(self) ->'int':
+    def index(self) -> "int":
         """Gets or sets the current string index of the grammar contents"""
         return len(self.contents) - len(self.current)
 
     @index.setter
-    def index(self, value: 'int') ->'None':
+    def index(self, value: "int") -> "None":
         ind = max(0, min(value, len(self.contents) - 1))
         self.current = self.contents[ind:]
 
@@ -262,17 +265,19 @@ class Source:
                 continue
             break
 
-    def expect_regex(self, regex: 'str', error_message: 'str | None' = None) ->'re.Match':
+    def expect_regex(
+        self, regex: "str", error_message: "str | None" = None
+    ) -> "re.Match":
         """Tries to match regex and returns its match object. Prints an error otherwise."""
         if m := self.match_regex(regex):
             return m
         self.error(error_message or f"Expected '{regex}'")
 
-    def match_regex(self, regex: 'str', skip: 'bool' = True) ->'re.Match | None':
+    def match_regex(self, regex: "str", skip: "bool" = True) -> "re.Match | None":
         """Tries to match a regex, consumes it and returns its match object. Returns None otherwise."""
         if m := re.match(regex, self.current):
-            val = m[0].replace('\n', '\\n')
-            self.current = self.current[len(m[0]):]
+            val = m[0].replace("\n", "\\n")
+            self.current = self.current[len(m[0]) :]
             if self.verbosity >= DEBUG3:
                 self.info(f"Match success: {repr(regex)}", as_debug=True)
             if skip:
@@ -283,13 +288,13 @@ class Source:
                 self.info(f"Match fail: {repr(regex)}", as_debug=True)
         return None
 
-    def is_regex(self, regex: 'str') ->'bool':
+    def is_regex(self, regex: "str") -> "bool":
         """Returns whether a regex matches."""
         if re.match(regex, self.current):
             return True
         return False
 
-    def error(self, message: 'str') ->'None':
+    def error(self, message: "str") -> "None":
         """Aborts with an error message."""
         file, lin, col, line = self.location
 
@@ -300,7 +305,7 @@ class Source:
         print(f"{header}\n{location}\n{line}\n{pointer}", file=sys.stderr)
         sys.exit(1)
 
-    def warning(self, message: 'str') ->'None':
+    def warning(self, message: "str") -> "None":
         """Aborts with an error message."""
         file, lin, col, line = self.location
 
@@ -310,7 +315,9 @@ class Source:
 
         print(f"{header}\n{location}\n{line}\n{pointer}", file=sys.stderr)
 
-    def info(self, message: 'str', localized: 'bool' = True, as_debug: 'bool' = False) ->'None':
+    def info(
+        self, message: "str", localized: "bool" = True, as_debug: "bool" = False
+    ) -> "None":
         """Prints an information message."""
         file, lin, col, line = self.location
 
@@ -326,7 +333,7 @@ class Source:
         else:
             print(header, file=sys.stdout)
 
-    def success(self, message: 'str', localized: 'bool' = True) ->'None':
+    def success(self, message: "str", localized: "bool" = True) -> "None":
         """Prints an success message."""
         file, lin, col, line = self.location
 
@@ -339,17 +346,18 @@ class Source:
         else:
             print(header, file=sys.stdout)
 
+
 # endregion (classes)
 # ---------------------------------------------------------
 # region FUNCTIONS
 
 
-def parse(grammar_source: 'str', grammar_filename: 'str', output_parser_filename: 'str', verbosity: 'Verbosity' = ERROR) ->'tuple[GrammarNodes, Source]':
+def parse(grammar_source: "str", grammar_filename: "str", output_parser_filename: "str", verbosity: "Verbosity" = ERROR) -> "tuple[GrammarNodes, Source]":
     """Parses a grammar and produces an parser API module"""
     global grammar
 
-    ptime: 'float' = time.process_time()
-    last_grammar: 'Source' = grammar
+    ptime: "float" = time.process_time()
+    last_grammar: "Source" = grammar
 
     grammar = Source(grammar_source, grammar_source, grammar_filename, verbosity)
 
@@ -357,14 +365,14 @@ def parse(grammar_source: 'str', grammar_filename: 'str', output_parser_filename
         grammar.info(f"Parsing grammar file: '{grammar_filename}'")
 
     if verbosity >= DEBUG1:
-        num_lines = grammar_source.count('\n')
+        num_lines = grammar_source.count("\n")
         grammar.info(f"Grammar has {num_lines} lines, {len(grammar_source)} chars", as_debug=True)
 
-    grammar_nodes: 'GrammarNodes' = GrammarNodes(grammar_filename, output_parser_filename)
+    grammar_nodes: "GrammarNodes" = GrammarNodes(grammar_filename, output_parser_filename)
     parse_grammar(grammar_nodes, verbosity)
     grammar_nodes.expand_tokens()
 
-    delta: 'float' = time.process_time() - ptime
+    delta: "float" = time.process_time() - ptime
 
     if verbosity >= DEBUG1:
         grammar.info(f"Grammar parsing took {delta:.4f} seconds.", localized=False, as_debug=True)
@@ -378,7 +386,7 @@ def parse(grammar_source: 'str', grammar_filename: 'str', output_parser_filename
     return grammar_nodes, src
 
 
-def parse_grammar(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR):
+def parse_grammar(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR):
     """Parses the grammar sections"""
     grammar.skip()
     while True:
@@ -388,18 +396,24 @@ def parse_grammar(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR)
         break
 
 
-def parse_section(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR) ->'bool':
+def parse_section(
+    grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR
+) -> "bool":
     """Parses a grammar section"""
-    m: 'Match' = grammar.expect_regex(RE_SECTION, ERR_SECTION)
+    m: "Match" = grammar.expect_regex(RE_SECTION, ERR_SECTION)
 
-    section_name: 'str' = m[1]
-    section_spec: 'str' = m[3] if m[3] else m[1]
+    section_name: "str" = m[1]
+    section_spec: "str" = m[3] if m[3] else m[1]
 
     grammar.skip()
 
     if section_name == SECTION_TOKEN:
         if verbosity >= DEBUG1:
-            grammar.info(f"Section: {section_name} ({section_spec})", localized=False, as_debug=True)
+            grammar.info(
+                f"Section: {section_name} ({section_spec})",
+                localized=False,
+                as_debug=True,
+            )
 
         if section_name == section_spec:
             parse_token_definitions(section_name, grammar_nodes, verbosity)
@@ -418,18 +432,20 @@ def parse_section(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR)
     return False
 
 
-def parse_decorators(exclusions: 'list[str]', annotations: 'list[str]', match_index: 'list[str]', verbosity: 'Verbosity' = ERROR):
+def parse_decorators(exclusions: "list[str]", annotations: "list[str]", match_index: "list[str]", verbosity: "Verbosity" = ERROR):
     """Parses token definition decorators"""
 
-    has_match_index: 'bool' = False
+    has_match_index: "bool" = False
     while True:
         if directive_match := grammar.match_regex(RE_DECORATOR):
-
-
             if directive_match[1] in DECORATORS:
                 annotations.append(directive_match[1])
                 if verbosity >= DEBUG2:
-                    grammar.info(f"Directive (annotation): {directive_match[0]}", localized=False, as_debug=True)
+                    grammar.info(
+                        f"Directive (annotation): {directive_match[0]}",
+                        localized=False,
+                        as_debug=True,
+                    )
 
             elif re.fullmatch(r"[0-9]", directive_match[1]):
                 if has_match_index:
@@ -438,43 +454,61 @@ def parse_decorators(exclusions: 'list[str]', annotations: 'list[str]', match_in
                     has_match_index = True
                 match_index[0] = int(directive_match[1], 10)
                 if verbosity >= DEBUG2:
-                    grammar.info(f"Directive (regex match group index): {directive_match[0]}", localized=False, as_debug=True)
+                    grammar.info(
+                        f"Directive (regex match group index): {directive_match[0]}",
+                        localized=False,
+                        as_debug=True,
+                    )
 
             else:
                 if verbosity >= WARNING:
-                    grammar.warning(f"Unknown decorator {directive_match[1]} (will be ignored)")
+                    grammar.warning(
+                        f"Unknown decorator {directive_match[1]} (will be ignored)"
+                    )
             continue
 
         if exclusion_match := grammar.match_regex(RE_EXCLUSION):
-
             if verbosity >= DEBUG2:
-                grammar.info(f"Directive (value exclusion): {exclusion_match[0]}", localized=False, as_debug=True)
+                grammar.info(
+                    f"Directive (value exclusion): {exclusion_match[0]}",
+                    localized=False,
+                    as_debug=True,
+                )
             exclusions.append(exclusion_match[1])
             continue
 
         break
 
 
-def parse_token_definitions(section_name: 'str', grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR):
+def parse_token_definitions(section_name: "str", grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR):
     """Parses the `.token` section"""
     value_match: Match
 
     while True:
         if name_match := grammar.match_regex(RE_TOKEN_NAME):
-            def_name: 'str' = name_match[0]
+            def_name: "str" = name_match[0]
             value_match = grammar.expect_regex(RE_TOKEN_VALUE, ERR_TOKEN_VALUE)
 
             if verbosity >= DEBUG2:
-                grammar.info(f"{def_name} = {value_match[0]}", localized=False, as_debug=True)
+                grammar.info(
+                    f"{def_name} = {value_match[0]}", localized=False, as_debug=True
+                )
 
-            def_excludes: 'list[str]' = []
-            def_decorators: 'list[str]' = []
-            def_match_index: 'list[str]' = [0]
+            def_excludes: "list[str]" = []
+            def_decorators: "list[str]" = []
+            def_match_index: "list[str]" = [0]
 
             parse_decorators(def_excludes, def_decorators, def_match_index, verbosity)
-            def_rule: 'str' = value_match[1]
+            def_rule: "str" = value_match[1]
 
-            token_definition: 'TokenDef' = TokenDef(def_name, def_rule, True, def_excludes, def_decorators, def_match_index[0])
+            token_definition: "TokenDef" = TokenDef(
+                def_name,
+                def_rule,
+                True,
+                def_excludes,
+                def_decorators,
+                def_match_index[0],
+            )
 
             if grammar_nodes.has_node(token_definition):
                 grammar.error(ERR_DEFINITION)
@@ -488,16 +522,17 @@ def parse_token_definitions(section_name: 'str', grammar_nodes: 'GrammarNodes', 
         break
 
 
-
-def parse_kind_definition(section_name: 'str', section_spec: 'str', grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR):
+def parse_kind_definition(section_name: "str", section_spec: "str", grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR):
     """Parses a token group section"""
-    kind_items: 'list[str]' = []
+    kind_items: "list[str]" = []
 
     while True:
         if item_match := grammar.match_regex(RE_TOKEN_ITEM):
             item_value = item_match[2]
             if verbosity >= DEBUG2:
-                grammar.info(f"Token kind: {repr(item_value)}", localized=False, as_debug=True)
+                grammar.info(
+                    f"Token kind: {repr(item_value)}", localized=False, as_debug=True
+                )
             if item_value in kind_items:
                 grammar.error(ERR_TOKEN_ITEM)
 
@@ -507,7 +542,7 @@ def parse_kind_definition(section_name: 'str', section_spec: 'str', grammar_node
 
     grammar.expect_regex(SECTION_END, "Expected section end")
 
-    kind_definition: 'KindDef' = KindDef(section_spec, kind_items)
+    kind_definition: "KindDef" = KindDef(section_spec, kind_items)
 
     if grammar_nodes.has_node(kind_definition):
         grammar.error(ERR_DEFINITION)
@@ -517,11 +552,11 @@ def parse_kind_definition(section_name: 'str', section_spec: 'str', grammar_node
         grammar.info(f"Kind added: {kind_definition.name}", localized=False)
 
 
-def parse_rule_attributes(rule: 'RuleDef', verbosity: 'Verbosity' = ERROR):
+def parse_rule_attributes(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
     """Parses a rule attribute"""
-    re_word: 'str' = r"\w+"
-    attrib_key: 'str' = ''
-    attrib_val: 'str | bool'
+    re_word: "str" = r"\w+"
+    attrib_key: "str" = ""
+    attrib_val: "str | bool"
     if grammar.match_regex(RE_RULE_ATTRIB):
         grammar.expect_regex(r"\{")
 
@@ -530,12 +565,16 @@ def parse_rule_attributes(rule: 'RuleDef', verbosity: 'Verbosity' = ERROR):
             match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
 
             if not rule.add_attribute(match_key[0], match_value[0]):
-                grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
+                grammar.warning(
+                    f"Rule {rule.name} already has {match_key[0]} attribute"
+                )
             elif verbosity >= INFO:
                 grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
         else:
             if not rule.add_directive(match_key[0]):
-                grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
+                grammar.warning(
+                    f"Rule {rule.name} already has {match_key[0]} directive"
+                )
             elif verbosity >= INFO:
                 grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
 
@@ -545,22 +584,30 @@ def parse_rule_attributes(rule: 'RuleDef', verbosity: 'Verbosity' = ERROR):
                 match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
 
                 if not rule.add_attribute(match_key[0], match_value[0]):
-                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
+                    grammar.warning(
+                        f"Rule {rule.name} already has {match_key[0]} attribute"
+                    )
                 elif verbosity >= INFO:
-                    grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
+                    grammar.info(
+                        f"Rule attribute added: {match_key[0]}", localized=False
+                    )
             else:
                 if not rule.add_directive(match_key[0]):
-                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
+                    grammar.warning(
+                        f"Rule {rule.name} already has {match_key[0]} directive"
+                    )
                 elif verbosity >= INFO:
-                    grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+                    grammar.info(
+                        f"Rule directive added: {match_key[0]}", localized=False
+                    )
 
         grammar.expect_regex(r"\}")
 
 
-def parse_rule_definitions(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity' = ERROR):
+def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR):
     """Parses the .rules section"""
-    names: 'list[str]' = []
-    can_be_nested: 'bool' = True
+    names: "list[str]" = []
+    can_be_nested: "bool" = True
 
     while True:
         if rule_match := grammar.match_regex(RE_RULE_NAME):
@@ -568,21 +615,25 @@ def parse_rule_definitions(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity'
                 grammar.error(ERR_RULE_NAME)
             names.append(rule_match[0])
 
-            rule_definition: 'RuleDef' = RuleDef(rule_match[0], grammar.index)
+            rule_definition: "RuleDef" = RuleDef(rule_match[0], grammar.index)
             grammar.expect_regex(RE_COLON)
 
             parse_rule_attributes(rule_definition, verbosity)
 
             grammar.expect_regex(RE_ASSIGN)
 
-            entry: 'NodeGroup' = rule_definition.add_entry('node')
-            starts_with_rule: 'bool' = parse_rule_entry(entry, rule_definition.node, verbosity)
+            entry: "NodeGroup" = rule_definition.add_entry("node")
+            starts_with_rule: "bool" = parse_rule_entry(
+                rule_definition, entry, rule_definition.node, verbosity
+            )
             if starts_with_rule:
                 can_be_nested = False
 
             while grammar.match_regex(RE_OR):
-                entry = rule_definition.add_entry('node')
-                starts_with_rule = parse_rule_entry(entry, rule_definition.node, verbosity)
+                entry = rule_definition.add_entry("node")
+                starts_with_rule = parse_rule_entry(
+                    rule_definition, entry, rule_definition.node, verbosity
+                )
                 if starts_with_rule:
                     can_be_nested = False
 
@@ -594,19 +645,22 @@ def parse_rule_definitions(grammar_nodes: 'GrammarNodes', verbosity: 'Verbosity'
             grammar_nodes.add(rule_definition)
 
             if verbosity >= DEBUG1:
-                rule_style: 'str' = 'simple' if rule_definition.is_simple else 'complex'
-                grammar.info(f"Rule added: {rule_definition.name} ({rule_style})", localized=False)
+                rule_style: "str" = "simple" if rule_definition.is_simple else "complex"
+                grammar.info(
+                    f"Rule added: {rule_definition.name} ({rule_style})",
+                    localized=False,
+                )
 
             continue
         break
 
 
-def parse_rule_entry(entry: 'NodeGroup', node: dict[str, Any], verbosity: 'Verbosity' = ERROR) ->'bool':
+def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], verbosity: "Verbosity" = ERROR) -> "bool":
     """Parses the rule definition(s)"""
     ref: GrammarNodeReference | NodeGroup
-    refs: 'Sequence[GrammarNodeReference | NodeGroup]' = []
-    index: 'int' = grammar.index
-    starts_with_rule: 'bool' = False
+    refs: "Sequence[GrammarNodeReference | NodeGroup]" = []
+    index: "int" = grammar.index
+    starts_with_rule: "bool" = False
 
     while True:
         index = grammar.index
@@ -631,7 +685,7 @@ def parse_rule_entry(entry: 'NodeGroup', node: dict[str, Any], verbosity: 'Verbo
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_PAREN):
-            inline_group: 'NodeGroup' = NodeGroup(GM_SEQUENTIAL, NC_ONE)
+            inline_group: "NodeGroup" = NodeGroup(GM_SEQUENTIAL, NC_ONE)
 
             if verbosity >= DEBUG2:
                 grammar.info("Entered inline Group", localized=False, as_debug=True)
@@ -642,29 +696,33 @@ def parse_rule_entry(entry: 'NodeGroup', node: dict[str, Any], verbosity: 'Verbo
                 grammar.warning("Redundant grouping")
 
             if verbosity >= DEBUG2:
-                grammar.info(f"Exited inline Group: {inline_group}", localized=False, as_debug=True)
+                grammar.info(
+                    f"Exited inline Group: {inline_group}",
+                    localized=False,
+                    as_debug=True,
+                )
 
             refs.append(inline_group)
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_BRACKET):
-            group: 'NodeGroup' = NodeGroup(GM_OPTIONAL, NC_ONE)
+            group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
             parse_inline_group(group, RE_CLOSE_BRACKET)
             refs.append(group)
             continue
         break
 
     for i, ref in enumerate(refs):
-        entry.add_item(ref, '_')
+        entry.add_item(ref, "_")
 
     if grammar.match_regex(RE_CAPTURE):
-        capts: 'str | list[Any]' = parse_entry_capture(refs, node, verbosity=verbosity)
+        capts: "str | list[Any]" = parse_entry_capture(refs, node, verbosity=verbosity, rule=rule)
         assign_group_captures(entry, capts, verbosity)
 
     return starts_with_rule
 
 
-def parse_entry_capture(refs: 'Sequence[GrammarNodeReference | NodeGroup]', node: dict[str, Any], inline: 'bool' = False, verbosity: 'Verbosity' = ERROR) ->'str | list[Any]':
+def parse_entry_capture(refs: "Sequence[GrammarNodeReference | NodeGroup]", node: dict[str, Any], inline: "bool" = False, verbosity: "Verbosity" = ERROR, rule: RuleDef=None) -> "str | list[Any]":
     """Parses the capture names for rule definition(s)"""
     captures = []
     closed = False
@@ -675,7 +733,7 @@ def parse_entry_capture(refs: 'Sequence[GrammarNodeReference | NodeGroup]', node
             continue
 
         if capt_match := grammar.match_regex(RE_OPEN_PAREN):
-            sub_capt: 'str | list[Any]' = parse_entry_capture(refs, node, inline=True)
+            sub_capt: "str | list[Any]" = parse_entry_capture(refs, node, inline=True)
             captures.append(sub_capt)
             continue
 
@@ -683,6 +741,7 @@ def parse_entry_capture(refs: 'Sequence[GrammarNodeReference | NodeGroup]', node
             if not inline:
                 grammar.error(f"Unexpected ')'")
             closed = True
+            break
 
         if capt_match := grammar.match_regex(r"(\*)?(\w+)(\.\w+)?"):
             captures.append(capt_match[0])
@@ -707,11 +766,11 @@ def parse_entry_capture(refs: 'Sequence[GrammarNodeReference | NodeGroup]', node
     return captures
 
 
-def assign_group_captures(group: 'NodeGroup', captures: 'str | list[str]', verbosity: 'Verbosity' = ERROR):
+def assign_group_captures(group: "NodeGroup", captures: "str | list[str]", verbosity: "Verbosity" = ERROR):
     """Assign the capture names to respective node references"""
-    refs: 'list[GrammarNodeReference | NodeGroup]' = group.refs
-    n_capts: 'int' = len(captures)
-    n_refs: 'int' = len(refs)
+    refs: "list[GrammarNodeReference | NodeGroup]" = group.refs
+    n_capts: "int" = len(captures)
+    n_refs: "int" = len(refs)
 
     for i in range(n_refs):
         ref = refs[i]
@@ -719,15 +778,24 @@ def assign_group_captures(group: 'NodeGroup', captures: 'str | list[str]', verbo
             continue
         cap = captures[i]
 
-        if isinstance(ref, GrammarNodeReference) and isinstance(cap, str) or isinstance(ref, (str, NodeGroup)) and isinstance(cap, list):
+        if (
+            isinstance(ref, GrammarNodeReference)
+            and isinstance(cap, str)
+            or isinstance(ref, (str, NodeGroup))
+            and isinstance(cap, list)
+        ):
             ref.capture = cap
 
             if isinstance(ref, NodeGroup) and isinstance(cap, list):
                 ref.captures = cap
-                ref.capture = '_'
+                ref.capture = "_"
                 assign_group_captures(ref, cap, verbosity)
 
-        elif isinstance(ref, NodeGroup) and ref.mode is GM_ALTERNATIVE and isinstance(cap, str):
+        elif (
+            isinstance(ref, NodeGroup)
+            and ref.mode is GM_ALTERNATIVE
+            and isinstance(cap, str)
+        ):
             for subref in ref.refs:
                 subref.capture = cap
 
@@ -738,22 +806,23 @@ def assign_group_captures(group: 'NodeGroup', captures: 'str | list[str]', verbo
                 grammar.warning(f"Rule entry mismatches items and capture names")
 
         if verbosity >= DEBUG1:
-            grammar.info(f"Node ref: `{ref}`, assigned: `{cap}`", localized=False, as_debug=True)
+            grammar.info(
+                f"Node ref: `{ref}`, assigned: `{cap}`", localized=False, as_debug=True
+            )
 
 
-def parse_inline_group(group: 'NodeGroup', re_close_brace: 'str', verbosity: 'Verbosity' = ERROR):
+def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Verbosity" = ERROR):
     """Parses an inline group of node references"""
-    initial_mode: 'GroupMode' = group.mode
-    initial_count: 'NodeCount' = group.count
-    can_be_alternative: 'bool' = group.mode is not GM_OPTIONAL
-    is_alternative: 'bool' = group.mode is GM_ALTERNATIVE
-    expects_pipe: 'bool' = False
-    has_rule: 'bool' = False
-    refs: 'Sequence[GrammarNodeReference | NodeGroup]' = []
-    ref: 'GrammarNodeReference | NodeGroup'
+    initial_mode: "GroupMode" = group.mode
+    initial_count: "NodeCount" = group.count
+    can_be_alternative: "bool" = group.mode is not GM_OPTIONAL
+    is_alternative: "bool" = group.mode is GM_ALTERNATIVE
+    expects_pipe: "bool" = False
+    has_rule: "bool" = False
+    refs: "Sequence[GrammarNodeReference | NodeGroup]" = []
+    ref: "GrammarNodeReference | NodeGroup"
 
     while True:
-
         if match_item := grammar.match_regex(RE_OR):
             if is_alternative:
                 if expects_pipe:
@@ -762,7 +831,7 @@ def parse_inline_group(group: 'NodeGroup', re_close_brace: 'str', verbosity: 'Ve
                 else:
                     grammar.error(ERR_UNEXPECTED_PIPE)
             # elif has_rule:
-                # grammar.error("Alternative groups can't have rules")
+            # grammar.error("Alternative groups can't have rules")
             elif can_be_alternative:
                 if len(refs) == 1:
                     is_alternative = True
@@ -802,16 +871,16 @@ def parse_inline_group(group: 'NodeGroup', re_close_brace: 'str', verbosity: 'Ve
                 if expects_pipe:
                     grammar.error(ERR_EXPECTED_PIPE)
                 # else:
-                    # grammar.error("Alternative groups can't have rules")
+                # grammar.error("Alternative groups can't have rules")
 
             cnt = COUNT_MAP.get(match_item[2], NC_ONE)
             ref = RuleRef(match_item[1], count=cnt)
             # if len(refs) == 0:
-                # grammar.error("Inline groups can't begin with rules")
+            # grammar.error("Inline groups can't begin with rules")
             refs.append(ref)
             has_rule = True
             # if is_alternative:
-                # expects_pipe = True
+            # expects_pipe = True
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_PAREN):
@@ -819,7 +888,7 @@ def parse_inline_group(group: 'NodeGroup', re_close_brace: 'str', verbosity: 'Ve
             if is_alternative and expects_pipe:
                 grammar.error(ERR_EXPECTED_PIPE)
 
-            inline_group: 'NodeGroup' = NodeGroup(GM_SEQUENTIAL, NC_ONE)
+            inline_group: "NodeGroup" = NodeGroup(GM_SEQUENTIAL, NC_ONE)
             parse_inline_group(inline_group, RE_CLOSE_PAREN_GROUP)
 
             if inline_group.mode is GM_SEQUENTIAL and inline_group.count is NC_ONE:
@@ -836,7 +905,7 @@ def parse_inline_group(group: 'NodeGroup', re_close_brace: 'str', verbosity: 'Ve
             if is_alternative and expects_pipe:
                 grammar.error(ERR_EXPECTED_PIPE)
 
-            inline_group: 'NodeGroup' = NodeGroup(GM_OPTIONAL, NC_ONE)
+            inline_group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
             parse_inline_group(inline_group, RE_CLOSE_BRACKET)
             refs.append(inline_group)
             if is_alternative:
@@ -850,6 +919,7 @@ def parse_inline_group(group: 'NodeGroup', re_close_brace: 'str', verbosity: 'Ve
             group.count = COUNT_MAP.get(close_match[1], NC_ONE)
 
     for ref in refs:
-        group.add_item(ref, '_')
+        group.add_item(ref, "_")
+
 
 # endregion (functions)
