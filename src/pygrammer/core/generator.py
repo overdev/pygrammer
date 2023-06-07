@@ -481,24 +481,7 @@ def compose_parser():
             composer.template_exact(TPL_UTILITIES)
 
         with composer.region("parser API"):
-            with composer.func_def(
-                "parse",
-                ["source_fname", "output_ast_fname", "start_rule"],
-                "Parsers a source file and generates an abstract syntax tree of the source.",
-            ):
-                composer.line("global source")
-                composer.line("main_rule = f'match_{snakefy(start_rule)}'")
-                composer.line("callback = globals().get(main_rule, lambda: {})")
-                composer.line("print(start_rule, main_rule)")
-                with composer.with_stmt(
-                    "open(source_fname, 'r', encoding='utf8') as fp"
-                ):
-                    composer.line("source_contents = fp.read()")
-                composer.line(
-                    "source = Source(source_contents, source_contents, source_fname)"
-                )
-                composer.line("source.skip()")
-                composer.line("return callback()")
+            composer.template_exact(TPL_API)
 
             compose_token_definitions()
             compose_kind_definitions()
@@ -632,13 +615,45 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
     docstring: "str" = f"Parses a {rule_name} rule"
     node_kind: "str" = suffix.upper()
 
-    with composer.func_def(f"expect_{suffix}", [], docstring):
-        composer.line("loc = source.index")
-        with composer.if_stmt(f"node := match_{suffix}()"):
-            composer.line("return node")
-        composer.line(f'source.error("{node_kind} node expected.", at=loc)')
+    with composer.func_def(f"is_{suffix}", [], docstring):
+        # NOTE: previou code for is_*()
+        # composer.line("global scopes_enabled")
+        # composer.line("saved_scope_state = scopes_enabled")
+        # with composer.if_stmt("scopes_enabled"):
+        #     composer.line(f"print('disabling scope for {suffix}')")
+        # composer.line("scopes_enabled = False    # disable during checking")
+        # composer.line("result = False")
+        # if rule.is_simple:
+        #     for i, entry in enumerate(rule.entries):
+        #         # check_entry(entry)
+        #         if isinstance(entry.first, NodeGroup):
+        #             compose_reference(entry.first.first, "test", test_chained=i > 0)
+        #         else:
+        #             compose_reference(entry.first, "test", test_chained=i > 0)
+        #         with composer.suite():
+        #             composer.line(f"log(False, debug3=f'{rule_name} found')")
+        #             composer.line("result = True")
 
-    with composer.func_def(f"match_{suffix}", [], docstring):
+        #     with composer.else_stmt():
+        #         composer.line(f"log(False, debug3=f'{rule_name} not found')")
+        #         composer.line("result = False")
+        # else:
+        #     composer.line(f"index = source.index")
+        #     composer.line(f"result = False")
+        #     composer.line(f"push_verb('error')")
+        #     with composer.if_stmt(f"m := match_{suffix}(True)"):
+        #         # composer.line(f"log(False, debug3=f'{rule_name} (complex) found')")
+        #         composer.line(f"result = True")
+        #     # composer.line(f"source.warning('{rule_name} is complex and can only be tested by cheating.')")
+        #     composer.line(f"pop_verb()")
+        #     composer.line(f"source.index = index")
+        # with composer.if_stmt("scopes_enabled != saved_scope_state"):
+        #     composer.line(f"print('reenabling scope for {suffix}')")
+        # composer.line("scopes_enabled = saved_scope_state   # restore previous state")
+        # composer.line("return result")
+        composer.line(f"return match_{suffix}(True)")
+
+    with composer.func_def(f"match_{suffix}", ['just_checking = False'], docstring):
         if verbosity := rule.get("verbosity"):
             composer.line(f"push_verb('{verbosity}', True)")
         composer.line(f"log(False, debug1=f'In {rule_name}:')")
@@ -647,7 +662,7 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         if rule.has("scope"):
             composer.line(f"log(False, debug2=f'Entering {rule_name} scope')")
-            composer.line(f"push_scope()")
+            composer.line(f"push_scope(just_checking)")
 
         for i, entry in enumerate(rule.entries):
             # check_entry(entry)
@@ -656,12 +671,14 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
                 composer.line(f"log(False, debug3=f'Matched {rule_name} entry no.{i}')")
 
         with composer.else_stmt():
+            with composer.if_stmt(f"just_checking"):
+                composer.line("return False")
             composer.line(f"log(False, debug2=f'No match for {rule_name} rule')")
             composer.line("node = None")
 
-        if scope_val := rule.has("scope"):
+        if scope_val := rule.get("scope"):
             composer.line(f"log(False, debug2=f'Leaving {rule_name} scope')")
-            composer.line(f"pop_scope(node, '{scope_val}')")
+            composer.line(f"pop_scope(node, '{scope_val}', just_checking)")
 
         if identifier := rule.get("declare"):
             with composer.if_stmt("node"):
@@ -681,34 +698,11 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
         else:
             composer.line("return node")
 
-    with composer.func_def(f"is_{suffix}", [], docstring):
-        composer.line("global scopes_enabled")
-        composer.line("reenable_scopes = scopes_enabled is True")
-        composer.line("result = False")
-        composer.line("scopes_enabled = False")
-        if rule.is_simple:
-            for i, entry in enumerate(rule.entries):
-                check_entry(entry)
-                compose_reference(entry.first, "test", test_chained=i > 0)
-                with composer.suite():
-                    composer.line(f"log(False, debug3=f'{rule_name} found')")
-                    composer.line("result = True")
-
-            with composer.else_stmt():
-                composer.line(f"log(False, debug3=f'{rule_name} not found')")
-                composer.line("result = False")
-        else:
-            composer.line(f"index = source.index")
-            composer.line(f"result = False")
-            composer.line(f"push_verb('error')")
-            with composer.if_stmt(f"m := match_{suffix}()"):
-                # composer.line(f"log(False, debug3=f'{rule_name} (complex) found')")
-                composer.line(f"result = True")
-            # composer.line(f"source.warning('{rule_name} is complex and can only be tested by cheating.')")
-            composer.line(f"pop_verb()")
-            composer.line(f"source.index = index")
-        composer.line("scopes_enabled = True if reenable_scopes else False")
-        composer.line("return result")
+    with composer.func_def(f"expect_{suffix}", [], docstring):
+        composer.line("loc = source.index")
+        with composer.if_stmt(f"node := match_{suffix}()"):
+            composer.line("return node")
+        composer.line(f'source.error("{node_kind} node expected.", at=loc)')
 
 
 # endregion (RULE)
@@ -719,9 +713,14 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 def compose_group_entry(group: "NodeGroup", rule: "RuleDef", first: "bool"):
     """Composes the code for a rule alternative"""
 
-    compose_reference(group.first, "test", test_chained=not first)
+    if isinstance(group.first, NodeGroup):
+        compose_reference(group.first.first, "test", test_chained=not first)
+    else:
+        compose_reference(group.first, "test", test_chained=not first)
 
     with composer.suite():
+        with composer.if_stmt(f"just_checking"):
+            composer.line("return True")
         for item in group.refs:
             if isinstance(item, GrammarNodeReference):
                 compose_reference(item, "init", supress_init_one=True)
@@ -774,12 +773,13 @@ def compose_group_alternative(group: "NodeGroup"):
 
     for i, item in enumerate(group.refs):
         if isinstance(item, NodeGroup):
-            source.index = item.index
-            source.error("Invalid item in alternative group")
-
-        compose_reference(item, "test", test_chained=i > 0)
-        with composer.suite():
-            compose_reference(item, "capture", test_chained=i > 0)
+            compose_group_inline(item)
+            # source.index = item.index
+            # source.error("Invalid item in alternative group")
+        else:
+            compose_reference(item, "test", test_chained=i > 0)
+            with composer.suite():
+                compose_reference(item, "capture", test_chained=i > 0)
     if group.count is not NC_ZERO_OR_ONE:
         with composer.else_stmt():
             if group.count is NC_ONE:
@@ -885,11 +885,12 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
                 source.index = ref.index
                 source.error(f"Rule not found: {ref.value}")
             should_merge_rule = rule.has_directive("merge")
-            source.info(
-                f"{rule.name} should merge rule: {should_merge_rule} ({rule.get('update')}={cap})",
-                localized=False,
-                as_debug=should_merge_rule,
-            )
+
+            # source.info(
+            #     f"{rule.name} should merge rule: {should_merge_rule} ({rule.get('update')}={cap})",
+            #     localized=False,
+            #     as_debug=should_merge_rule,
+            # )
 
             kind = snakefy(ref.value).upper()
             call = (
