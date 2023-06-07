@@ -780,11 +780,12 @@ def compose_group_alternative(group: "NodeGroup"):
         compose_reference(item, "test", test_chained=i > 0)
         with composer.suite():
             compose_reference(item, "capture", test_chained=i > 0)
-    with composer.else_stmt():
-        if group.count is NC_ONE:
-            composer.line("source.error('Unexpected token')")
-        elif group.count in (NC_ONE_OR_MORE, NC_ZERO_OR_MORE):
-            composer.line("break")
+    if group.count is not NC_ZERO_OR_ONE:
+        with composer.else_stmt():
+            if group.count is NC_ONE:
+                composer.line("source.error('Unexpected token')")
+            elif group.count in (NC_ONE_OR_MORE, NC_ZERO_OR_MORE):
+                composer.line("break")
 
     if dedent_after_loop:
         composer.dedent_only()
@@ -857,6 +858,9 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
 
         elif isinstance(ref, RuleRef):
             rule: "RuleDef" = grammar.get_rule(ref.value)
+            if rule is None:
+                source.index = ref.index
+                source.error(f"Rule not found: {ref.value}")
             composer.line(f"{stmt} is_{snakefy(ref.value)}():")
 
     elif action == "capture":
@@ -877,6 +881,9 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
 
         elif isinstance(ref, RuleRef):
             rule: "RuleDef" = grammar.get_rule(ref.value)
+            if rule is None:
+                source.index = ref.index
+                source.error(f"Rule not found: {ref.value}")
             should_merge_rule = rule.has_directive("merge")
             source.info(
                 f"{rule.name} should merge rule: {should_merge_rule} ({rule.get('update')}={cap})",

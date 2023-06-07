@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Constant name typo `NC_ZERO_OR_MORE` in `compose_reference()`
+- Fixed code generation for inline groups in the form `( A | B | C )?`
 
 ## 0.1beta1 - 2023-06-05
 
