@@ -136,6 +136,11 @@ class TokenDef(GrammarNodeDefinition):
         """Gets the token's regular expression matching group index"""
         return self._match_index
 
+    @property
+    def exclusions(self) ->'list[str]':
+        """Gets the token grops this definition excludes"""
+        return self._excludes
+
     def has_decorator(self, decorator: 'str') ->'bool':
         """Returns whether the token definition has the specified decorator"""
         return decorator in self._decorators
@@ -143,10 +148,6 @@ class TokenDef(GrammarNodeDefinition):
     def excludes_kind(self, token_kind: 'str') ->'bool':
         """Returns whether the token definition excludes the specified token group"""
         return token_kind in self._excludes
-
-    def exclusions(self, token_kind: 'str') ->'list[str]':
-        """Returns the token grops this definition excludes"""
-        return self._excludes
 
 
 class KindDef(GrammarNodeDefinition):
@@ -292,6 +293,38 @@ class NodeGroup:
     def first(self) -> 'GrammarNode | NodeGroup':
         """Gets the first item in the group"""
         return self.refs[0]
+
+    @property
+    def is_uncertain(self) -> bool:
+        """Gets whether the group starting item is optional"""
+        ref = self.first
+        return ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE) or isinstance(ref, NodeGroup) and ref.mode is GM_OPTIONAL
+
+    @property
+    def is_doubtfull(self) -> bool:
+        """Gets whether all items in the group are optional"""
+        refs = []
+        for ref in enumerate(self.refs):
+            if ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE) or isinstance(ref, NodeGroup) and ref.mode is GM_OPTIONAL:
+                refs.append(True)
+            else:
+                refs.append(False)
+                break
+
+        return False not in refs
+
+    @property
+    def first_optionals(self) -> "Sequence[GrammarNodeReference | NodeGroup]":
+        """Gets all starting items that are optional to the group"""
+        refs = []
+        i: 'int' = -1
+        for i, ref in enumerate(self.refs):
+            if ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE) or isinstance(ref, NodeGroup) and ref.mode is GM_OPTIONAL:
+                refs.append(ref)
+            else:
+                refs.append(ref)
+                break
+        return refs
 
     @property
     def has_capture(self) ->'bool':
