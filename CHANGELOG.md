@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Code generated for testing rule matching (`is_*()`) got way simpler and faster, also causing a LOC reduction of up to 20%.
 - `parse()` moved to templates and shows better log messages
+- Code generated for testing groups now complains about **doubtful** cases (where all items are optional) or **uncertain** (where first items are optional in a nested fashion).
 
 ### Added
 
