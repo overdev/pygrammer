@@ -9,27 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Constant name typo `NC_ZERO_OR_MORE` in `compose_reference()`
-- Fixed code generation for inline groups in the form `( A | B | C )?`
-- Fixed parsing capture of inline groups where the inline group was including items after its delimiter
+- Constant name typo `NC_ZERO_OR_MORE` in `compose_reference()`.
+- Fixed code generation for inline groups in the form `( A | B | C )?`.
+- Fixed parsing capture of inline groups where the inline group was including items after its delimiter.
 
 ### Changed
 
 - Code generated for testing rule matching (`is_*()`) got way simpler and faster, also causing a LOC reduction of up to 20%.
-- `parse()` moved to templates and shows better log messages
+- `parse()` moved to templates and shows better log messages.
 - Code generated for testing groups now complains about **doubtful** cases (where all items are optional) or **uncertain** (where first items are optional in a nested fashion).
+- Code generation for tokens now include instructions to compile RE patterns.
+- Removed code repetition in 'Source' log methods.
 
 ### Added
 
-- CLI argument `-verbosity` or `-v` to generated parser module do define initial log verbosity level (Defaults to `error`)
+- CLI argument `-verbosity` or `-v` to generated parser module do define initial log verbosity level (Defaults to `error`).
 
 ## 0.1beta1 - 2023-06-05
 
 ### Added
 
-- Core features: grammar parser, parser generator and CLI functionality
-- Token decorators and exclusions: `@something` and `^TOKEN_GROUP` to change how token definitions are treated
-- Rule attributes and directives: `@{attribute:value, directive}` to change how rule definitions are treated
+- Core features: grammar parser, parser generator and CLI functionality.
+- Token decorators and exclusions: `@something` and `^TOKEN_GROUP` to change how token definitions are treated.
+- Rule attributes and directives: `@{attribute:value, directive}` to change how rule definitions are treated.
 
 <!--
 ### Fixed
