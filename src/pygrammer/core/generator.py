@@ -487,9 +487,7 @@ def compose_parser():
             compose_kind_definitions()
             compose_rule_definitions()
 
-        with composer.func_def(
-            "main", [], "Parser's CLI entry point.", empty_before=3, empty_after=1
-        ):
+        with composer.func_def("main", [], "Parser's CLI entry point.", empty_before=3, empty_after=1):
             composer.template(TPL_MAIN)
 
     composer.dashed_line()
@@ -529,36 +527,43 @@ def compose_rule_definitions():
             compose_ruledef(name, ruledef)
 
 
-def compose_def_body(
-    suffix: "str",
-    docstring: "str",
-    const_name: "str",
-    regex_str: "str",
-    match_index: "int",
-):
+def compose_def_body(suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
     """Composes the functions for parsing tokens"""
     with composer.func_def(f"is_{suffix}", [], docstring):
-        composer.line(f"return source.is_regex(r{regex_str})")
-
-    with composer.func_def(f"match_{suffix}", [], docstring):
         composer.line("location = source.location")
-        with composer.if_stmt(f"m := source.match_regex(r{regex_str})"):
-            composer.line(
-                """log(False, debug3=f"Matched token with regex {{regex_str}} at line {location[1]}, {location[2]}: '{m[0]}'")"""
-            )
-            composer.line(
-                f"return {{ 'kind': '{const_name}', 'value': m[{match_index}], 'lc': [ location[1], location[2] ] }}"
-            )
-        composer.line(f"return None")
+        with composer.if_stmt(f"match_{suffix}(False)"):
+            composer.line(f"return True")
+        composer.line(f"return False")
+
+    with composer.func_def(f"match_{suffix}", ["advance=True"], docstring):
+        composer.line("location = source.location")
+
+        with composer.if_stmt(f"m_{suffix} := source.match_regex(r{regex_str}, False)"):
+            if excludes:
+                for exclusion in excludes:
+                    if kind := grammar.kinds.get(exclusion):
+                        value = '|'.join(kind.values)
+                        with composer.if_stmt(f"m_{snakefy(exclusion)} := re.fullmatch(r{repr(value)}, m_{suffix}[0])"):
+                            with composer.if_stmt(f"not advance"):
+                                composer.line(f"return False")
+                            composer.line(f"log(True, error='Expected {const_name}, got {exclusion}')")
+                    else:
+                        source.error(f"{const_name} exclusion '{exclusion}' is not defined")
+
+            with composer.if_stmt("advance"):
+                composer.line(f"m = source.expect_regex(r{regex_str}, advance)")
+                composer.line(f"log(False, debug3=f\"\"\"Matched token with regex {regex_str} at line {{location[1]}}, {{location[2]}}: '{{m[0]}}'\"\"\")")
+                composer.line(f"return {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ] }}")
+            with composer.else_stmt():
+                composer.line(f"return True")
+
+        composer.line(f"return None if advance else False")
 
     with composer.func_def(f"expect_{suffix}", [], docstring):
         composer.line("location = source.location")
-        composer.line(
-            f"m = source.expect_regex(r{regex_str}, '{const_name} expected.')"
-        )
-        composer.line(
-            f"return {{ 'kind': '{const_name}', 'value': m[{match_index}], 'lc': [ location[1], location[2] ] }}"
-        )
+        with composer.if_stmt(f"m_{suffix} := match_{suffix}()"):
+            composer.line(f"return m_{suffix}")
+        composer.line(f"log(True, error='Expected {const_name}')")
 
     with composer.func_def(f"parse_{suffix}", [], docstring):
         composer.line(f"item = expect_{suffix}()")
@@ -575,7 +580,7 @@ def compose_tokendef(token_name: "str", token: "TokenDef"):
     docstring: "str" = f"Parses a {token_name} token"
     regex_str: "str" = f"'''{token.value}'''"
 
-    compose_def_body(suffix, docstring, const_name, regex_str, token.match_index)
+    compose_def_body(suffix, docstring, const_name, regex_str, token.match_index, token.exclusions)
 
 
 # endregion (TOKEN)
@@ -591,7 +596,7 @@ def compose_kinddef(kind_name: "str", kind: "KindDef"):
     values = "|".join(kind.values)
     regex_str = f"'''{values}'''"
 
-    compose_def_body(suffix, docstring, const_name, regex_str, 0)
+    compose_def_body(suffix, docstring, const_name, regex_str, 0, None)
 
 
 # endregion (KIND)
@@ -616,47 +621,12 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
     node_kind: "str" = suffix.upper()
 
     with composer.func_def(f"is_{suffix}", [], docstring):
-        # NOTE: previou code for is_*()
-        # composer.line("global scopes_enabled")
-        # composer.line("saved_scope_state = scopes_enabled")
-        # with composer.if_stmt("scopes_enabled"):
-        #     composer.line(f"print('disabling scope for {suffix}')")
-        # composer.line("scopes_enabled = False    # disable during checking")
-        # composer.line("result = False")
-        # if rule.is_simple:
-        #     for i, entry in enumerate(rule.entries):
-        #         # check_entry(entry)
-        #         if isinstance(entry.first, NodeGroup):
-        #             compose_reference(entry.first.first, "test", test_chained=i > 0)
-        #         else:
-        #             compose_reference(entry.first, "test", test_chained=i > 0)
-        #         with composer.suite():
-        #             composer.line(f"log(False, debug3=f'{rule_name} found')")
-        #             composer.line("result = True")
-
-        #     with composer.else_stmt():
-        #         composer.line(f"log(False, debug3=f'{rule_name} not found')")
-        #         composer.line("result = False")
-        # else:
-        #     composer.line(f"index = source.index")
-        #     composer.line(f"result = False")
-        #     composer.line(f"push_verb('error')")
-        #     with composer.if_stmt(f"m := match_{suffix}(True)"):
-        #         # composer.line(f"log(False, debug3=f'{rule_name} (complex) found')")
-        #         composer.line(f"result = True")
-        #     # composer.line(f"source.warning('{rule_name} is complex and can only be tested by cheating.')")
-        #     composer.line(f"pop_verb()")
-        #     composer.line(f"source.index = index")
-        # with composer.if_stmt("scopes_enabled != saved_scope_state"):
-        #     composer.line(f"print('reenabling scope for {suffix}')")
-        # composer.line("scopes_enabled = saved_scope_state   # restore previous state")
-        # composer.line("return result")
         composer.line(f"return match_{suffix}(True)")
 
     with composer.func_def(f"match_{suffix}", ['just_checking = False'], docstring):
         if verbosity := rule.get("verbosity"):
             composer.line(f"push_verb('{verbosity}', True)")
-        composer.line(f"log(False, debug1=f'In {rule_name}:')")
+        composer.line(f"log(False, debug1=f'Testing {rule_name}:' if just_checking else f'Matching {rule_name}:')")
 
         composer.line(f"node = {{ 'kind': '{node_kind}' }}")
 
@@ -712,18 +682,24 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
 def compose_group_entry(group: "NodeGroup", rule: "RuleDef", first: "bool"):
     """Composes the code for a rule alternative"""
+    if group.is_doubtfull:
+        source.index = group.index
+        source.error("Entry must have at least one non-optional item")
 
-    if isinstance(group.first, NodeGroup):
-        compose_reference(group.first.first, "test", test_chained=not first)
+    elif group.is_uncertain:
+        compose_group_entry_test(group, not first)
+
+    elif isinstance(group.first, NodeGroup) and group.first.mode is GM_ALTERNATIVE:
+        compose_group_alternative_test(group.first, not first)
     else:
         compose_reference(group.first, "test", test_chained=not first)
 
     with composer.suite():
         with composer.if_stmt(f"just_checking"):
             composer.line("return True")
-        for item in group.refs:
-            if isinstance(item, GrammarNodeReference):
-                compose_reference(item, "init", supress_init_one=True)
+        # for item in group.refs:
+        #     if isinstance(item, GrammarNodeReference):
+        #         compose_reference(item, "init", supress_init_one=True)
 
         for item in group.refs:
             if isinstance(item, GrammarNodeReference):
@@ -733,12 +709,35 @@ def compose_group_entry(group: "NodeGroup", rule: "RuleDef", first: "bool"):
                 compose_group_inline(item)
 
 
+def compose_group_entry_test(group: "NodeGroup", chained: "bool", return_test: bool = False):
+    calls = []
+    for i, item in enumerate(group.first_optionals):
+        call = None
+        if isinstance(item, NodeGroup):
+            if item.is_uncertain or item.is_doubtfull:
+                source.index = item.index
+                source.error("Level of matching uncertainty is too high")
+
+            else:
+                call = compose_group_entry_test(item, i > 0, return_test=True)
+
+        else:
+            call = compose_reference(item, "test", return_test=True)
+
+        if call:
+            calls.append(call)
+
+    full_test = ' or '.join(calls)
+
+    if return_test:
+        return full_test
+
+    stmt = 'elif' if chained else 'if'
+    composer.line(f"{stmt} {full_test}:")
+
+
 def compose_group_inline(group: "NodeGroup"):
     """Composes the code for a inline group"""
-    for item in group.refs:
-        if isinstance(item, GrammarNodeReference):
-            compose_reference(item, "init", supress_init_one=True)
-
     if group.mode is GM_OPTIONAL:
         compose_group_optional(group)
 
@@ -752,14 +751,39 @@ def compose_group_inline(group: "NodeGroup"):
 def compose_group_optional(group: "NodeGroup"):
     """Composes the code for a optional inline group"""
     composer.comment("Option group below")
-    compose_reference(group.first, "test", test_loop=False)
+    compose_group_entry_test(group, False)
     with composer.suite():
         for item in group.refs:
             if isinstance(item, GrammarNodeReference):
-                compose_reference(item, "capture", use_capture=group.capture)
+                compose_reference(item, "capture")
 
             elif isinstance(item, NodeGroup):
                 compose_group_inline(item)
+
+
+def compose_group_alternative_test(group: "NodeGroup", chained: "bool", return_test: bool = False):
+    calls = []
+    for item in group.refs:
+        call = None
+        if isinstance(item, NodeGroup):
+            if item.is_uncertain or item.is_doubtfull:
+                source.index = item.index
+                source.error("Level of matching uncertainty is too high")
+            else:
+                call = compose_group_entry_test(item, False, return_test=True)
+        else:
+            call = compose_reference(item, "test", return_test=True)
+
+        if call:
+            calls.append(call)
+
+    full_test = ' or '.join(calls)
+
+    if return_test:
+        return full_test
+
+    stmt = 'elif' if chained else 'if'
+    composer.line(f"{stmt} {full_test}:")
 
 
 def compose_group_alternative(group: "NodeGroup"):
@@ -774,8 +798,6 @@ def compose_group_alternative(group: "NodeGroup"):
     for i, item in enumerate(group.refs):
         if isinstance(item, NodeGroup):
             compose_group_inline(item)
-            # source.index = item.index
-            # source.error("Invalid item in alternative group")
         else:
             compose_reference(item, "test", test_chained=i > 0)
             with composer.suite():
@@ -822,28 +844,23 @@ def compose_group_sequential(group: "NodeGroup"):
 def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **kwargs):
     """Composes parsing operations referenced inside rules"""
     has_cap: "bool" = ref.capture != "_"
-    many: "bool" = ref.capture.startswith("*") or ref.count in (
-        NC_ONE_OR_MORE,
-        NC_ZERO_OR_MORE,
-    )
-    opt: "bool" = ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE)
+    must_append: "bool" = ref.capture.startswith("*")
+    is_optional: "bool" = ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE)
     cap = kwargs.get("use_capture", ref.capture).lstrip("*")
     should_merge_rule: "bool" = False
     has_lookup: "bool" = False
     if "." in cap:
         cap, lookup = cap.split(".", 2)
         has_lookup = True
-    initializer: "str" = "[]" if many else "None"
     test_chained = kwargs.get("test_chained", False)
     supress_init_one = kwargs.get("supress_init_one", False)
+    return_test = kwargs.get("return_test", False)
 
     if action == "init":
-        if has_cap:
-            if supress_init_one and not many:
-                return
-            composer.line(f"node['{cap}'] = {initializer}")
+        pass
 
     elif action == "test":
+        call = ''
         if kwargs.get("test_loop", False):
             stmt = "while"
         else:
@@ -851,33 +868,34 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
 
         if isinstance(ref, TokenRef):
             val = escape_token(ref.value)
-            composer.line(f"{stmt} is_token(r'{val}'):")
+            call = f"is_token(r'{val}')"
 
         elif isinstance(ref, KindRef):
-            composer.line(f"{stmt} is_{snakefy(ref.value)}():")
+            call = f"is_{snakefy(ref.value)}()"
 
         elif isinstance(ref, RuleRef):
             rule: "RuleDef" = grammar.get_rule(ref.value)
             if rule is None:
                 source.index = ref.index
                 source.error(f"Rule not found: {ref.value}")
-            composer.line(f"{stmt} is_{snakefy(ref.value)}():")
+            call = f"is_{snakefy(ref.value)}()"
+
+        if return_test:
+            return call
+        else:
+            composer.line(f"{stmt} {call}:")
 
     elif action == "capture":
         if isinstance(ref, TokenRef):
             kind = "TOKEN"
             val = escape_token(ref.value)
-            call = f"match_token(r'{val}')" if opt else f"expect_token(r'{val}')"
             mcall = f"match_token(r'{val}')"
+            call = mcall if is_optional else f"expect_token(r'{val}')"
 
         elif isinstance(ref, KindRef):
             kind = snakefy(ref.value).upper()
-            call = (
-                f"match_{snakefy(ref.value)}()"
-                if opt
-                else f"expect_{snakefy(ref.value)}()"
-            )
             mcall = f"match_{snakefy(ref.value)}()"
+            call = mcall if is_optional else f"expect_{snakefy(ref.value)}()"
 
         elif isinstance(ref, RuleRef):
             rule: "RuleDef" = grammar.get_rule(ref.value)
@@ -886,44 +904,40 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
                 source.error(f"Rule not found: {ref.value}")
             should_merge_rule = rule.has_directive("merge")
 
-            # source.info(
-            #     f"{rule.name} should merge rule: {should_merge_rule} ({rule.get('update')}={cap})",
-            #     localized=False,
-            #     as_debug=should_merge_rule,
-            # )
-
             kind = snakefy(ref.value).upper()
-            call = (
-                f"match_{snakefy(ref.value)}()"
-                if opt
-                else f"expect_{snakefy(ref.value)}()"
-            )
             mcall = f"match_{snakefy(ref.value)}()"
+            call = mcall if is_optional else f"expect_{snakefy(ref.value)}()"
 
         if should_merge_rule:
             if ref.count not in (NC_ONE, NC_ZERO_OR_ONE):
-                source.error(
-                    f"{ref.value} rule must have at most one ocurrence ({ref.count.name})."
-                )
+                source.error(f"{ref.value} rule must have at most one ocurrence ({ref.count.name}).")
             composer.line(f"node_update(node, {mcall})")
         else:
             if has_lookup:
                 call = f"node_lookup({call}, '{lookup}', '{kind}')"
-            capt = f".append({call})" if many else f" = {call}"
+                mcall = f"node_lookup({mcall}, '{lookup}', '{kind}')"
+
             if has_cap:
                 if ref.count is NC_ONE:
-                    composer.line(f"node['{cap}']{capt}")
+                    if must_append:
+                        composer.line(f"append(node, '{cap}', {call})")
+                    else:
+                        composer.line(f"node['{cap}'] = {call}")
                 elif ref.count is NC_ONE_OR_MORE:
-                    composer.line(f"node['{cap}'].append({call})")
+                    composer.line(f"append(node, '{cap}', {call})")
                     composer.line_and_indent(f"while {cap} := {mcall}:")
-                    composer.line(f"node['{cap}'].append({cap})")
+                    composer.line(f"append(node, '{cap}', cap)")
                     composer.dedent_only()
                 elif ref.count is NC_ZERO_OR_MORE:
                     composer.line_and_indent(f"while {cap} := {mcall}:")
-                    composer.line(f"node['{cap}'].append({cap})")
+                    composer.line(f"append(node, '{cap}', cap)")
                     composer.dedent_only()
-                else:
-                    composer.line(f"node['{cap}']{capt}")
+                elif ref.count is NC_ZERO_OR_ONE:
+                    if must_append:
+                        composer.line(f"append(node, '{cap}', {mcall})")
+                    else:
+                        composer.line(f"node['{cap}'] = {mcall}")
+
             else:
                 if ref.count is NC_ONE:
                     composer.line(call)
