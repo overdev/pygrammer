@@ -294,8 +294,11 @@ class Source:
             return True
         return False
 
-    def error(self, message: "str") -> "None":
+    def error(self, message: "str", at_index: "int | None" = None) -> "None":
         """Aborts with an error message."""
+        if at_index is not None:
+            self.index = at_index
+
         file, lin, col, line = self.location
 
         header = f"{Fore.BLACK}{Back.RED}ERROR: {Style.BRIGHT}{Fore.RED}{Back.BLACK} {message}{Style.RESET_ALL}"
@@ -529,10 +532,10 @@ def parse_kind_definition(section_name: "str", section_spec: "str", grammar_node
     while True:
         if item_match := grammar.match_regex(RE_TOKEN_ITEM):
             item_value = item_match[2]
+
             if verbosity >= DEBUG2:
-                grammar.info(
-                    f"Token kind: {repr(item_value)}", localized=False, as_debug=True
-                )
+                grammar.info(f"Token kind: {repr(item_value)}", localized=False, as_debug=True)
+
             if item_value in kind_items:
                 grammar.error(ERR_TOKEN_ITEM)
 
@@ -557,49 +560,41 @@ def parse_rule_attributes(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
     re_word: "str" = r"\w+"
     attrib_key: "str" = ""
     attrib_val: "str | bool"
+
     if grammar.match_regex(RE_RULE_ATTRIB):
         grammar.expect_regex(r"\{")
-
         match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
+
         if grammar.match_regex(r":"):
             match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
 
             if not rule.add_attribute(match_key[0], match_value[0]):
-                grammar.warning(
-                    f"Rule {rule.name} already has {match_key[0]} attribute"
-                )
+                grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
             elif verbosity >= INFO:
                 grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
+
         else:
             if not rule.add_directive(match_key[0]):
-                grammar.warning(
-                    f"Rule {rule.name} already has {match_key[0]} directive"
-                )
+                grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
             elif verbosity >= INFO:
                 grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
 
         while grammar.match_regex(r","):
             match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
+
             if grammar.match_regex(r":"):
                 match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
 
                 if not rule.add_attribute(match_key[0], match_value[0]):
-                    grammar.warning(
-                        f"Rule {rule.name} already has {match_key[0]} attribute"
-                    )
+                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
                 elif verbosity >= INFO:
-                    grammar.info(
-                        f"Rule attribute added: {match_key[0]}", localized=False
-                    )
+                    grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
+
             else:
                 if not rule.add_directive(match_key[0]):
-                    grammar.warning(
-                        f"Rule {rule.name} already has {match_key[0]} directive"
-                    )
+                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
                 elif verbosity >= INFO:
-                    grammar.info(
-                        f"Rule directive added: {match_key[0]}", localized=False
-                    )
+                    grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
 
         grammar.expect_regex(r"\}")
 
@@ -619,26 +614,26 @@ def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity"
             grammar.expect_regex(RE_COLON)
 
             parse_rule_attributes(rule_definition, verbosity)
-
             grammar.expect_regex(RE_ASSIGN)
 
+            index = grammar.index
             entry: "NodeGroup" = rule_definition.add_entry("node")
-            starts_with_rule: "bool" = parse_rule_entry(
-                rule_definition, entry, rule_definition.node, verbosity
-            )
+            entry.index = index
+            starts_with_rule: "bool" = parse_rule_entry(rule_definition, entry, rule_definition.node, verbosity)
+
             if starts_with_rule:
                 can_be_nested = False
 
             while grammar.match_regex(RE_OR):
+                index = grammar.index
                 entry = rule_definition.add_entry("node")
-                starts_with_rule = parse_rule_entry(
-                    rule_definition, entry, rule_definition.node, verbosity
-                )
+                entry.index = index
+                starts_with_rule = parse_rule_entry(rule_definition, entry, rule_definition.node, verbosity)
+
                 if starts_with_rule:
                     can_be_nested = False
 
             grammar.expect_regex(RE_SEMICOLON)
-            # rule_definition.is_simple = can_be_nested
 
             if grammar_nodes.has_node(rule_definition):
                 grammar.error(ERR_DEFINITION)
@@ -646,10 +641,7 @@ def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity"
 
             if verbosity >= DEBUG1:
                 rule_style: "str" = "simple" if rule_definition.is_simple else "complex"
-                grammar.info(
-                    f"Rule added: {rule_definition.name} ({rule_style})",
-                    localized=False,
-                )
+                grammar.info(f"Rule added: {rule_definition.name} ({rule_style})", localized=False)
 
             continue
         break
@@ -696,19 +688,23 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
                 grammar.warning("Redundant grouping")
 
             if verbosity >= DEBUG2:
-                grammar.info(
-                    f"Exited inline Group: {inline_group}",
-                    localized=False,
-                    as_debug=True,
-                )
+                grammar.info(f"Exited inline Group: {inline_group}", localized=False, as_debug=True)
 
             refs.append(inline_group)
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_BRACKET):
-            group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
-            parse_inline_group(group, RE_CLOSE_BRACKET)
-            refs.append(group)
+            inline_group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
+
+            if verbosity >= DEBUG2:
+                grammar.info("Entered inline optional Group", localized=False, as_debug=True)
+
+            parse_inline_group(inline_group, RE_CLOSE_BRACKET)
+
+            if verbosity >= DEBUG2:
+                grammar.info("Exited inline optional Group", localized=False, as_debug=True)
+
+            refs.append(inline_group)
             continue
         break
 
@@ -778,12 +774,7 @@ def assign_group_captures(group: "NodeGroup", captures: "str | list[str]", verbo
             continue
         cap = captures[i]
 
-        if (
-            isinstance(ref, GrammarNodeReference)
-            and isinstance(cap, str)
-            or isinstance(ref, (str, NodeGroup))
-            and isinstance(cap, list)
-        ):
+        if (isinstance(ref, GrammarNodeReference) and isinstance(cap, str) or isinstance(ref, (str, NodeGroup)) and isinstance(cap, list)):
             ref.capture = cap
 
             if isinstance(ref, NodeGroup) and isinstance(cap, list):
@@ -791,11 +782,7 @@ def assign_group_captures(group: "NodeGroup", captures: "str | list[str]", verbo
                 ref.capture = "_"
                 assign_group_captures(ref, cap, verbosity)
 
-        elif (
-            isinstance(ref, NodeGroup)
-            and ref.mode is GM_ALTERNATIVE
-            and isinstance(cap, str)
-        ):
+        elif (isinstance(ref, NodeGroup) and ref.mode is GM_ALTERNATIVE and isinstance(cap, str)):
             for subref in ref.refs:
                 subref.capture = cap
 
@@ -806,9 +793,7 @@ def assign_group_captures(group: "NodeGroup", captures: "str | list[str]", verbo
                 grammar.warning(f"Rule entry mismatches items and capture names")
 
         if verbosity >= DEBUG1:
-            grammar.info(
-                f"Node ref: `{ref}`, assigned: `{cap}`", localized=False, as_debug=True
-            )
+            grammar.info(f"Node ref: `{ref}`, assigned: `{cap}`", localized=False, as_debug=True)
 
 
 def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Verbosity" = ERROR):
@@ -823,15 +808,15 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
     ref: "GrammarNodeReference | NodeGroup"
 
     while True:
+        index = grammar.index
         if match_item := grammar.match_regex(RE_OR):
             if is_alternative:
                 if expects_pipe:
                     expects_pipe = False
                     continue
                 else:
-                    grammar.error(ERR_UNEXPECTED_PIPE)
-            # elif has_rule:
-            # grammar.error("Alternative groups can't have rules")
+                    grammar.error(ERR_UNEXPECTED_PIPE, index)
+
             elif can_be_alternative:
                 if len(refs) == 1:
                     is_alternative = True
@@ -839,13 +824,13 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
                     group.mode = GM_ALTERNATIVE
                     continue
                 else:
-                    grammar.error(ERR_UNEXPECTED_PIPE)
+                    grammar.error(ERR_UNEXPECTED_PIPE, index)
             else:
-                grammar.error(ERR_UNEXPECTED_PIPE)
+                grammar.error(ERR_UNEXPECTED_PIPE, index)
 
         if match_item := grammar.match_regex(RE_TOKEN_INSTANCE):
             if is_alternative and expects_pipe:
-                grammar.error(ERR_EXPECTED_PIPE)
+                grammar.error(ERR_EXPECTED_PIPE, index)
 
             ref = TokenRef(match_item[2])
             refs.append(ref)
@@ -856,7 +841,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
 
         if match_item := grammar.match_regex(RE_KIND_INSTANCE):
             if is_alternative and expects_pipe:
-                grammar.error(ERR_EXPECTED_PIPE)
+                grammar.error(ERR_EXPECTED_PIPE, index)
 
             cnt = COUNT_MAP.get(match_item[2], NC_ONE)
             ref = KindRef(match_item[1], count=cnt)
@@ -869,24 +854,19 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
         if match_item := grammar.match_regex(RE_RULE_INSTANCE):
             if is_alternative:
                 if expects_pipe:
-                    grammar.error(ERR_EXPECTED_PIPE)
-                # else:
-                # grammar.error("Alternative groups can't have rules")
+                    grammar.error(ERR_EXPECTED_PIPE, index)
 
             cnt = COUNT_MAP.get(match_item[2], NC_ONE)
             ref = RuleRef(match_item[1], count=cnt)
-            # if len(refs) == 0:
-            # grammar.error("Inline groups can't begin with rules")
             refs.append(ref)
             has_rule = True
-            # if is_alternative:
-            # expects_pipe = True
+            if is_alternative:
+                expects_pipe = True
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_PAREN):
-            # grammar.error("Groups cannot be nested.")
             if is_alternative and expects_pipe:
-                grammar.error(ERR_EXPECTED_PIPE)
+                grammar.error(ERR_EXPECTED_PIPE, index)
 
             inline_group: "NodeGroup" = NodeGroup(GM_SEQUENTIAL, NC_ONE)
             parse_inline_group(inline_group, RE_CLOSE_PAREN_GROUP)
@@ -901,9 +881,8 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_BRACKET):
-            # grammar.error("Groups cannot be nested.")
             if is_alternative and expects_pipe:
-                grammar.error(ERR_EXPECTED_PIPE)
+                grammar.error(ERR_EXPECTED_PIPE, index)
 
             inline_group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
             parse_inline_group(inline_group, RE_CLOSE_BRACKET)
@@ -914,7 +893,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             continue
         break
 
-    if close_match := grammar.expect_regex(re_close_brace):
+    if close_match := grammar.expect_regex(re_close_brace, "Closing brace expected"):
         if initial_mode is not GM_OPTIONAL:
             group.count = COUNT_MAP.get(close_match[1], NC_ONE)
 
