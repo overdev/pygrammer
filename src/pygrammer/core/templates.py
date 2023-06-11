@@ -95,6 +95,7 @@ TPL_LICENSE = """# -------------------------------------------------------------
 TPL_DEPENDENCIES = """import re
 import json
 import time
+import io
 
 from argparse import ArgumentParser, Namespace, FileType
 from colorama import just_fix_windows_console, Fore, Back, Style
@@ -145,6 +146,12 @@ VERB_LEVELS = {
     'debug3': DEBUG3,
     'all': ALL
 }
+
+# region GENERATED CONSTANTS
+
+# **RE** #
+
+# endregion (generated constants)
 
 """
 
@@ -409,7 +416,7 @@ if ast:
 
     if done:
         message = f"Saved AST into file: '{args.out.name}'"
-        header = f"{Fore.BLACK}{Back.GREEN}ERROR: {Style.BRIGHT}{Fore.GREEN}{Back.BLACK} {message}{Style.RESET_ALL}"
+        header = f"{Fore.BLACK}{Back.GREEN}SUCCESS: {Style.BRIGHT}{Fore.GREEN}{Back.BLACK} {message}{Style.RESET_ALL}"
         print(header)
 else:
     message = "Done without significative output"
@@ -420,6 +427,10 @@ return 0
 """
 
 TPL_SOURCE_CLASS_1 = """
+
+class GrammarParserError(Exception):
+    pass
+
 
 @dataclass
 class Source:
@@ -457,15 +468,16 @@ class Source:
 TPL_SOURCE_CLASS_2 = """
             break
 
-    def expect_regex(self, regex: str, error_message: str | None = None) -> 're.Match':
+    def expect_regex(self, regex: 'str | re.Pattern', error_message: str | None = None) -> 're.Match':
         ""\"Tries to match regex and returns its match object. Prints an error otherwise.\"""
         if m := self.match_regex(regex):
             return m
         self.error(error_message or f"Expected '{regex}'")
 
-    def match_regex(self, regex: str, advance: bool = True, skip: bool = True) -> 're.Match | Bool | None':
+    def match_regex(self, regex: 'str | re.Pattern', advance: bool = True, skip: bool = True) -> 're.Match | Bool | None':
         ""\"Tries to match a regex, optionally consumes it and returns Match/None, otherwise a True/False.\"""
-        if m := re.match(regex, self.current):
+        m: 're.Match | None' = re.match(regex, self.current) if isinstance(regex, str) else regex.match(self.current)
+        if m:
             if advance:
                 self.current = self.current[len(m[0]):]
                 if self.verbosity >= DEBUG3:
@@ -478,63 +490,50 @@ TPL_SOURCE_CLASS_2 = """
             self.info(f"Match fail: {repr(regex)}", as_debug=True)
         return None
 
-    def is_regex(self, regex: str) -> 'bool':
+    def is_regex(self, regex: 'str | re.Pattern') -> 'bool':
         ""\"Returns whether a regex matches.\"""
         if re.match(regex, self.current):
             return True
         return False
 
+    def _log(self, severity: str, message: str, localized: bool = True, at_index: int | None = None, color='WHITE', sys_exit: bool = False, raise_exc: bool = False, out_file: io.IOBase = sys.stdout) -> 'None':
+        ""\"Prints an log message.""\"
+        saved_index = self.index
+        if isinstance(at_index, int):
+            self.index = at_index
+        file, lin, col, line = self.location
+        self.index = saved_index
+
+        header = f"{Fore.BLACK}{getattr(Back, color, Back.WHITE)}{severity}: {Style.BRIGHT}{getattr(Fore, color, Fore.WHITE)}{Back.BLACK} {message}{Style.RESET_ALL}"
+        location = f"{file}:{lin}:{col}{Style.RESET_ALL}"
+        pointer = f"  {' ' * (col - 1)}{getattr(Fore, color, Fore.WHITE)}^{Style.RESET_ALL}"
+
+        if raise_exc:
+            raise GrammarParserError(message)
+        else:
+            if localized:
+                print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=out_file)
+            else:
+                print(header, file=out_file)
+            
+            if sys_exit:
+                sys.exit(1)
+
     def error(self, message: str, at: int | None = None) -> 'None':
         ""\"Aborts with an error message.\"""
-        if at is not None:
-            self.index = at
-        file, lin, col, line = self.location
-
-        header = f"{Fore.BLACK}{Back.RED}ERROR: {Style.BRIGHT}{Fore.RED}{Back.BLACK} {message}{Style.RESET_ALL}"
-        location = f"{file}:{lin}:{col}{Style.RESET_ALL}"
-        pointer = f"  {' ' * (col - 1)}{Fore.RED}^{Style.RESET_ALL}"
-
-        print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
-        sys.exit(1)
+        self._log('ERROR', message, at_index=at, color='RED', sys_exit=True, out_file=sys.stderr)
 
     def warning(self, message: str) -> 'None':
         ""\"Aborts with an error message.""\"
-        file, lin, col, line = self.location
-
-        header = f"{Fore.BLACK}{Back.YELLOW}WARNING: {Style.BRIGHT}{Fore.YELLOW}{Back.BLACK} {message}{Style.RESET_ALL}"
-        location = f"{file}:{lin}:{col}{Style.RESET_ALL}"
-        pointer = f"  {' ' * (col - 1)}{Fore.YELLOW}^{Style.RESET_ALL}"
-
-        print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
+        self._log('WARNING', message, at_index=at, color='YELLOW')
 
     def info(self, message: str, localized: bool = True, as_debug: bool = False) -> 'None':
         ""\"Prints an information message.""\"
-        file, lin, col, line = self.location
-
-        if as_debug:
-            header = f"{Fore.BLACK}{Back.WHITE}DEBUG: {Style.BRIGHT}{Fore.WHITE}{Back.BLACK} {message}{Style.RESET_ALL}"
-        else:
-            header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
-        location = f"{file}:{lin}:{col}{Style.RESET_ALL}"
-        pointer = f"  {' ' * (col - 1)}{Fore.CYAN}^{Style.RESET_ALL}"
-
-        if localized:
-            print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
-        else:
-            print(header, file=sys.stdout)
+        self._log('DEBUG' if as_debug else 'INFO', message, localized, color='WHITE' if as_debug else 'CYAN')
 
     def success(self, message: str, localized: bool = True) -> 'None':
         ""\"Prints an success message.\"""
-        file, lin, col, line = self.location
-
-        header = f"{Fore.BLACK}{Back.GREEN}SUCCESS: {Style.BRIGHT}{Fore.GREEN}{Back.BLACK} {message}{Style.RESET_ALL}"
-        location = f"{file}:{lin}:{col}{Style.RESET_ALL}"
-        pointer = f"  {' ' * (col - 1)}{Fore.GREEN}^{Style.RESET_ALL}"
-
-        if localized:
-            print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
-        else:
-            print(header, file=sys.stdout)
+        self._log('SUCCESS', message, localized, color='GREEN')
 
 """
 
