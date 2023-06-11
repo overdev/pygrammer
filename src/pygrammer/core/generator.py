@@ -57,6 +57,10 @@ composer: "SourceComposer" = None
 grammar: "GrammarNodes" = None
 source: "Source" = None
 
+gen_templates: dict[str, str] = {
+    're_consts': '',
+}
+
 # endregion (globals)
 # ---------------------------------------------------------
 # region CONSTANTS & ENUMS
@@ -64,6 +68,8 @@ source: "Source" = None
 
 NEWLINE = "\n"
 INDENT = "    "
+
+RE_CONSTANTS = 're_consts'
 
 # endregion (constants)
 # ---------------------------------------------------------
@@ -385,10 +391,24 @@ class SourceComposer:
         self.empty(2)
         self.line(f"# endregion ({label.lower()})")
 
+    def replace(self, sub: str, rep: str):
+        """Replaces a substring sub in the output code with its replacement string rep"""
+        self.output = self.output.replace(sub, rep)
 
 # endregion (classes)
 # ---------------------------------------------------------
 # region FUNCTIONS
+
+
+def template_append(key: str, code: str):
+    global gen_templates
+
+    if key in gen_templates:
+        template = f"{gen_templates[key]}{code}"
+    else:
+        template = code
+
+    gen_templates[key] = template
 
 
 def snakefy(string: "str") -> "str":
@@ -434,6 +454,8 @@ def compose(grammar_nodes: "GrammarNodes", grammar_source: "Source"):
 
 def compose_parser():
     """Composes the parser module"""
+    global gen_templates
+
     with composer.region("header"):
         composer.template_exact(TPL_WARNING)
         composer.template_exact(TPL_LICENSE, year=2023, cr_owner="Jorge A. Gomes")
@@ -469,9 +491,7 @@ def compose_parser():
         with composer.suite(lv=3):
             for name, tokendef in grammar.tokens.items():
                 if tokendef.has_decorator(DCR_SKIP):
-                    with composer.if_stmt(
-                        f"m := self.match_regex(r'''{tokendef.value}''', skip=False)"
-                    ):
+                    with composer.if_stmt(f"m := self.match_regex(r'''{tokendef.value}''', skip=False)"):
                         composer.line("continue")
 
         composer.template_exact(TPL_SOURCE_CLASS_2)
@@ -498,6 +518,7 @@ def compose_parser():
 
         composer.empty()
 
+    composer.replace("# **RE** #", gen_templates[RE_CONSTANTS])
 
 # region GRAMMAR NODES
 
@@ -538,12 +559,12 @@ def compose_def_body(suffix: "str", docstring: "str", const_name: "str", regex_s
     with composer.func_def(f"match_{suffix}", ["advance=True"], docstring):
         composer.line("location = source.location")
 
-        with composer.if_stmt(f"m_{suffix} := source.match_regex(r{regex_str}, False)"):
+        with composer.if_stmt(f"m_{suffix} := source.match_regex(RE_{const_name}, False)"):
             if excludes:
                 for exclusion in excludes:
                     if kind := grammar.kinds.get(exclusion):
                         value = '|'.join(kind.values)
-                        with composer.if_stmt(f"m_{snakefy(exclusion)} := re.fullmatch(r{repr(value)}, m_{suffix}[0])"):
+                        with composer.if_stmt(f"m_{snakefy(exclusion)} := RE_{exclusion}.fullmatch(m_{suffix}[0])"):
                             with composer.if_stmt(f"not advance"):
                                 composer.line(f"return False")
                             composer.line(f"log(True, error='Expected {const_name}, got {exclusion}')")
@@ -551,8 +572,8 @@ def compose_def_body(suffix: "str", docstring: "str", const_name: "str", regex_s
                         source.error(f"{const_name} exclusion '{exclusion}' is not defined")
 
             with composer.if_stmt("advance"):
-                composer.line(f"m = source.expect_regex(r{regex_str}, advance)")
-                composer.line(f"log(False, debug3=f\"\"\"Matched token with regex {regex_str} at line {{location[1]}}, {{location[2]}}: '{{m[0]}}'\"\"\")")
+                composer.line(f"m = source.expect_regex(RE_{const_name}, advance)")
+                composer.line(f"log(False, debug3=f\"\"\"Matched token RE_{const_name} at line {{location[1]}}, {{location[2]}}: '{{m[0]}}'\"\"\")")
                 composer.line(f"return {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ] }}")
             with composer.else_stmt():
                 composer.line(f"return True")
@@ -580,6 +601,11 @@ def compose_tokendef(token_name: "str", token: "TokenDef"):
     docstring: "str" = f"Parses a {token_name} token"
     regex_str: "str" = f"'''{token.value}'''"
 
+    template_append(RE_CONSTANTS,
+        f"# Pattern for the {const_name} token\n"
+        f"RE_{const_name}: re.Pattern = re.compile(r{regex_str})\n"
+    )
+
     compose_def_body(suffix, docstring, const_name, regex_str, token.match_index, token.exclusions)
 
 
@@ -595,6 +621,11 @@ def compose_kinddef(kind_name: "str", kind: "KindDef"):
     docstring: "str" = f"Parses a {kind_name} kind"
     values = "|".join(kind.values)
     regex_str = f"'''{values}'''"
+
+    template_append(RE_CONSTANTS,
+        f"# Pattern for the {kind_name} token group\n"
+        f"RE_{const_name}: re.Pattern = re.compile(r{regex_str})\n"
+    )
 
     compose_def_body(suffix, docstring, const_name, regex_str, 0, None)
 
