@@ -149,8 +149,10 @@ VERB_LEVELS = {
 """
 
 TPL_UTILITIES = """
+def clsn(o: "Any") -> 'str':
+    return o.__class__.__name__
 
-def snakefy(string: str) ->'str':
+def snakefy(string: str) -> 'str':
     lastchar = ''
     result = ''
 
@@ -223,22 +225,25 @@ def log(localized=False, **messages):
 
 def reduced(node, key):
     \"""Tries to reduce the node to its key""\"
-    if node:
+    if isinstance(node, dict):
         if key in node and len(node) == 2:
-            log(False, debug1=f"{node['kind']} reduced to its {key} item: ({node[key].get('kind', 'None')})")
+            log(False, debug1=f"{node['kind']} reduced to its {key} item")
             return node[key]
         else:
             log(False, debug1=f"{node['kind']} not reduced")
     return node
 
 def flipped(node, item_key, key):
-    \"""Tries to set the item as paret to the node""\"
-    if node:
+    ""\"Tries to set the item as paret to the node\"""
+    if isinstance(node, dict):
         if item := node.get(item_key):
-            del node[item_key]
-            item[key] = node
-            log(False, debug1=f"Item {item['kind']} now contains {node['kind']}")
-            return item
+            if isinstance(item, dict):
+                del node[item_key]
+                item[key] = node
+                log(False, debug1=f"Item {item['kind']} now contains {node['kind']}")
+                return item
+            else:
+                log(True, warning=f"node[{key}] is not a node (it's a {clsn(item)}, not a str)")
         else:
             log(False, debug1=f"{node['kind']} not flipped")
     log(False, debug2="No node to flip")
@@ -246,20 +251,20 @@ def flipped(node, item_key, key):
 
 def node_update(node, data):
     \"""Updates the node with items in data""\"
-    if node:
+    if isinstance(node, dict):
         if data:
             log(False, debug1=f"{node['kind']} becomes {data['kind']}")
             log(False, debug2=f"Before update keys: {', '.join(node.keys())}")
             node.update(data)
             log(False, debug2=f"After update keys: {', '.join(node.keys())}")
         else:
-            source.warning("Fail to update node: data is None")
+            log(True, debug1="Fail to update node: data is None")
     else:
         source.warning("Fail to update node: node is None")
 
 def node_lookup(node, member, kind):
     \"""Extracts the member item from the node""\"
-    if node:
+    if isinstance(node, dict):
         if m := node.get(member):
             log(False, debug1=f"{node['kind']}['{member}'] extracted")
             return m
@@ -293,7 +298,7 @@ def pop_scope(node, name, just_checking=False):
     if not just_checking:
         if len(scope_stack):
             scope = scope_stack.pop()
-            if node:
+            if isinstance(node, dict):
                 node[name] = scope
                 log(False, debug1=f"Scope assigned into node {node['kind']} under '{name}' key")
                 log(False, debug2=f"Scope has keys: {', '.join(scope.keys())}")
@@ -302,6 +307,18 @@ def pop_scope(node, name, just_checking=False):
                 source.warning("No node to assign scope into")
         else:
             source.error("No scope to pop")
+
+def append(node, key, value):
+    \"""Appends the value to the list in node[key]""\"
+    if isinstance(node, dict):
+        items = node.get(key, [])
+        if isinstance(items, list):
+            items.append(value)
+            node[key] = items
+        else:
+            log(True, warning=f"Cannot append to {key} in {node['kind']} node: not a list")
+    else:
+        log(True, warning=f"No node with '{key}' to append value into")
 
 def declare(identifier_key, node, kind):
     \"""Declares a node in the current scope""\"
@@ -323,7 +340,7 @@ def declare(identifier_key, node, kind):
 
         if name := node.get(identifier_key):
             if not isinstance(name, str):
-                source.error("Invalid node identifier type")
+                source.error(f"Invalid node identifier type (it's a {clsn(name)}, not a str)")
 
             if name in scope:
                 source.error(f"Redeclared name in scope: {name}")
@@ -412,7 +429,7 @@ class Source:
     verbosity: Verbosity = ERROR
 
     @property
-    def location(self) ->'tuple[str, int, int, str]':
+    def location(self) -> 'tuple[str, int, int, str]':
         ""\"Returns a 4-tuple containing the filename, line number, column, and line of code\"""
         consumed = len(self.contents) - len(self.current)
         consumed_lines = self.contents[0: consumed].split('\\n')
@@ -424,12 +441,12 @@ class Source:
         return self.filename, line_num, col_num, line
 
     @property
-    def index(self) ->'int':
+    def index(self) -> 'int':
         ""\"Gets or sets the current string index of the grammar contents\"""
         return len(self.contents) - len(self.current)
 
     @index.setter
-    def index(self, value: int) ->'None':
+    def index(self, value: int) -> 'None':
         ind = max(0, min(value, len(self.contents) - 1))
         self.current = self.contents[ind:]
 
@@ -440,34 +457,34 @@ class Source:
 TPL_SOURCE_CLASS_2 = """
             break
 
-    def expect_regex(self, regex: str, error_message: str | None = None) ->'re.Match':
+    def expect_regex(self, regex: str, error_message: str | None = None) -> 're.Match':
         ""\"Tries to match regex and returns its match object. Prints an error otherwise.\"""
         if m := self.match_regex(regex):
             return m
         self.error(error_message or f"Expected '{regex}'")
 
-    def match_regex(self, regex: str, skip: bool = True) ->'re.Match | None':
-        ""\"Tries to match a regex, consumes it and returns its match object. Returns None otherwise.\"""
+    def match_regex(self, regex: str, advance: bool = True, skip: bool = True) -> 're.Match | Bool | None':
+        ""\"Tries to match a regex, optionally consumes it and returns Match/None, otherwise a True/False.\"""
         if m := re.match(regex, self.current):
-            val = m[0].replace('\\n', '\\n')
-            self.current = self.current[len(m[0]):]
-            if self.verbosity >= DEBUG3:
-                self.info(f"Match success: {repr(regex)}", as_debug=True)
-            if skip:
-                self.skip()
+            if advance:
+                self.current = self.current[len(m[0]):]
+                if self.verbosity >= DEBUG3:
+                    self.info(f"Match success: {repr(regex)}", as_debug=True)
+                if skip:
+                    self.skip()
             return m
-        else:
-            if self.verbosity >= DEBUG3:
-                self.info(f"Match fail: {repr(regex)}", as_debug=True)
+
+        if advance and self.verbosity >= DEBUG3:
+            self.info(f"Match fail: {repr(regex)}", as_debug=True)
         return None
 
-    def is_regex(self, regex: str) ->'bool':
+    def is_regex(self, regex: str) -> 'bool':
         ""\"Returns whether a regex matches.\"""
         if re.match(regex, self.current):
             return True
         return False
 
-    def error(self, message: str, at: int | None = None) ->'None':
+    def error(self, message: str, at: int | None = None) -> 'None':
         ""\"Aborts with an error message.\"""
         if at is not None:
             self.index = at
@@ -480,7 +497,7 @@ TPL_SOURCE_CLASS_2 = """
         print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
         sys.exit(1)
 
-    def warning(self, message: str) ->'None':
+    def warning(self, message: str) -> 'None':
         ""\"Aborts with an error message.""\"
         file, lin, col, line = self.location
 
@@ -490,7 +507,7 @@ TPL_SOURCE_CLASS_2 = """
 
         print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=sys.stderr)
 
-    def info(self, message: str, localized: bool = True, as_debug: bool = False) ->'None':
+    def info(self, message: str, localized: bool = True, as_debug: bool = False) -> 'None':
         ""\"Prints an information message.""\"
         file, lin, col, line = self.location
 
@@ -506,7 +523,7 @@ TPL_SOURCE_CLASS_2 = """
         else:
             print(header, file=sys.stdout)
 
-    def success(self, message: str, localized: bool = True) ->'None':
+    def success(self, message: str, localized: bool = True) -> 'None':
         ""\"Prints an success message.\"""
         file, lin, col, line = self.location
 
