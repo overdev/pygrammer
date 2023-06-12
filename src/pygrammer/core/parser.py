@@ -53,6 +53,13 @@ __all__ = [
     "DCR_SKIP",
     "DCR_EXPAND",
     "DCR_INTERNAL",
+    'DCR_RELFILEPATH',
+    'DCR_ABSFILEPATH',
+    'DCR_RELDIRPATH',
+    'DCR_ABSDIRPATH',
+    'DCR_ENSURERELATIVE',
+    'DCR_ENSUREABSOLUTE',
+    'DCR_LOADANDPARSE',
     "Verbosity",
     "ERROR",
     "WARNING",
@@ -129,6 +136,13 @@ DCR_SKIP = "skip"
 DCR_EXPAND = "expand"
 DCR_INTERNAL = "internal"
 DCR_GETTER = "getter"
+DCR_RELFILEPATH = "relfilepath"
+DCR_ABSFILEPATH = "absfilepath"
+DCR_RELDIRPATH = "reldirpath"
+DCR_ABSDIRPATH = "absdirpath"
+DCR_ENSURERELATIVE = "ensurerelative"
+DCR_ENSUREABSOLUTE = "ensureabsolute"
+DCR_LOADANDPARSE = "loadandparse"
 
 DECORATORS = [
     DCR_WHITESPACE,
@@ -138,6 +152,13 @@ DECORATORS = [
     DCR_EXPAND,
     DCR_INTERNAL,
     DCR_GETTER,
+    DCR_RELFILEPATH,
+    DCR_ABSFILEPATH,
+    DCR_RELDIRPATH,
+    DCR_ABSDIRPATH,
+    DCR_ENSURERELATIVE,
+    DCR_ENSUREABSOLUTE,
+    DCR_LOADANDPARSE,
 ]
 
 COUNT_MAP = {
@@ -184,6 +205,7 @@ class GrammarNodes:
     kinds: "dict[str, KindDef]" = field(default_factory=dict)
     rules: "dict[str, RuleDef]" = field(default_factory=dict)
     node_names: "list[str]" = field(default_factory=list)
+    start_rule: 'RuleDef | None' = None
 
     def has_node(self, node: "GrammarNodeDefinition") -> "bool":
         """Returns whether the specified node is in the collection"""
@@ -399,9 +421,7 @@ def parse_grammar(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR)
         break
 
 
-def parse_section(
-    grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR
-) -> "bool":
+def parse_section(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR) -> "bool":
     """Parses a grammar section"""
     m: "Match" = grammar.expect_regex(RE_SECTION, ERR_SECTION)
 
@@ -444,11 +464,7 @@ def parse_decorators(exclusions: "list[str]", annotations: "list[str]", match_in
             if directive_match[1] in DECORATORS:
                 annotations.append(directive_match[1])
                 if verbosity >= DEBUG2:
-                    grammar.info(
-                        f"Directive (annotation): {directive_match[0]}",
-                        localized=False,
-                        as_debug=True,
-                    )
+                    grammar.info(f"Directive (annotation): {directive_match[0]}", localized=False, as_debug=True)
 
             elif re.fullmatch(r"[0-9]", directive_match[1]):
                 if has_match_index:
@@ -457,26 +473,16 @@ def parse_decorators(exclusions: "list[str]", annotations: "list[str]", match_in
                     has_match_index = True
                 match_index[0] = int(directive_match[1], 10)
                 if verbosity >= DEBUG2:
-                    grammar.info(
-                        f"Directive (regex match group index): {directive_match[0]}",
-                        localized=False,
-                        as_debug=True,
-                    )
+                    grammar.info(f"Directive (regex match group index): {directive_match[0]}", localized=False, as_debug=True)
 
             else:
                 if verbosity >= WARNING:
-                    grammar.warning(
-                        f"Unknown decorator {directive_match[1]} (will be ignored)"
-                    )
+                    grammar.warning(f"Unknown decorator {directive_match[1]} (will be ignored)")
             continue
 
         if exclusion_match := grammar.match_regex(RE_EXCLUSION):
             if verbosity >= DEBUG2:
-                grammar.info(
-                    f"Directive (value exclusion): {exclusion_match[0]}",
-                    localized=False,
-                    as_debug=True,
-                )
+                grammar.info(f"Directive (value exclusion): {exclusion_match[0]}", localized=False, as_debug=True)
             exclusions.append(exclusion_match[1])
             continue
 
@@ -613,7 +619,13 @@ def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity"
             rule_definition: "RuleDef" = RuleDef(rule_match[0], grammar.index)
             grammar.expect_regex(RE_COLON)
 
+            attr_index = grammar.index
             parse_rule_attributes(rule_definition, verbosity)
+            if rule_definition.has_directive("start"):
+                if grammar_nodes.start_rule is not None:
+                    grammar.index = attr_index
+                    grammer.error("Multiple starting rules selected.")
+                grammar_nodes.start_rule = rule_definition
             grammar.expect_regex(RE_ASSIGN)
 
             index = grammar.index
