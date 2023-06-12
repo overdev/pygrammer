@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.1beta2 - 2023-06-11
+
+Many improvements since beta1 but still there's a lot to be done. This beta2 pre-release includes:
+
 ### Fixed
 
 - Constant name typo `NC_ZERO_OR_MORE` in `compose_reference()`.
