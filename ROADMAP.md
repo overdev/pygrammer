@@ -10,12 +10,12 @@
     - [ ] `keepkind` directive prevent `merge` directive from overwriting the node kind
     - [ ] `join` directive to merge in the parent node only the items the parent node does not have
     - [ ] `file`, `filename`, `absdir`, `reldir` directives to add the respective file information to the node
-    - [ ] `@relfilepath` token decorator to check after matching if the value is a valid relative file path string format
-    - [ ] `@absfilepath` token decorator to check after matching if the value is a valid absolut file path string format
-    - [ ] `@reldirpath` token decorator to check after matching if the value is a valid relative directory path string format
-    - [ ] `@absdirpath` token decorator to check after matching if the value is a valid absolut directory path string format
-    - [ ] `@mustexist` token decorator to use along `@relfilepath`, `@absfilepath`, `@reldirpath` and `@absdirpath` to ensure the file or directory exists
-    - [ ] `@loadandparse` token decorator to take the value as a source file path, load its contents, parse it and return its AST
+    - [x] `@relfilepath` token decorator to check after matching if the value is a valid relative file path string format
+    - [x] `@absfilepath` token decorator to check after matching if the value is a valid absolut file path string format
+    - [x] `@reldirpath` token decorator to check after matching if the value is a valid relative directory path string format
+    - [x] `@absdirpath` token decorator to check after matching if the value is a valid absolut directory path string format
+    - [ ] CANCELLED: `@mustexist` token decorator to use along `@relfilepath`, `@absfilepath`, `@reldirpath` and `@absdirpath` to ensure the file or directory exists
+    - [x] `@loadandparse` token decorator to take the value as a source file path, load its contents, parse it and return its AST
     - [ ] Whatever relevant comes to mind in the process
 
 ### Revisions
@@ -24,7 +24,7 @@
     - [x] `is_*()` functions for rules got way smaller, basically one-liners.
     - [ ] remove code repetitions (WIP).
     - [ ] remove generated code that never gets called.
-- [x] keep `node['some_list'] = []` from getting in the way of `@{key:some_item}` when no item is ever appended.
+- [x] Keep `node['some_list'] = []` from getting in the way of `@{key:some_item}` when no item is ever appended.
 - [ ] Review the logging system to fix or mitigate the _log explosion_
 - [x] Try to eliminate the limitations of the parser regarding complex rules, which cause noticiable bottlenecks
     - [x] `is_*()` functions for rules don't cheat anymore by calling `match_*()` to see if it returns `None`.
@@ -32,3 +32,11 @@
 ### Documentation
 
 - [ ] Publish the documentation on ReadTheDocs
+
+## Plans for v1.1.x
+
+### Features
+
+- [ ] Tokenizer:
+    - [ ] Generate a stream of tokens that can be used for syntax highlighting
+    - [ ] Ensure the stream can be incrementally generated

@@ -20,10 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code generated for testing groups now complains about **doubtful** cases (where all items are optional) or **uncertain** (where first items are optional in a nested fashion).
 - Code generation for tokens now include instructions to compile RE patterns.
 - Removed code repetition in 'Source' log methods.
+- `parse()` no longer return the generated AST. This is due to `@loadandparse`. Now the module AST is stored in a global, then this global is retrieve and stored in a file.
 
 ### Added
 
 - CLI argument `-verbosity` or `-v` to generated parser module do define initial log verbosity level (Defaults to `error`).
+- Implemented token directives `@relfilepath`, `@absfilepath`, `@reldirpath`, `@absdirpath`, `@ensurerelative`, `@ensureabsolute` and `@loadandparse`.
+- Mandatory `start` directive to select a default starting rule. CLI `--start` argument can override this value, but it is required for `@loadandparse`.
 
 ## 0.1beta1 - 2023-06-05
 
