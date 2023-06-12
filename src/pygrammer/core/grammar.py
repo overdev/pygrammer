@@ -132,20 +132,32 @@ class TokenDef(GrammarNodeDefinition):
         return self._is_regex
 
     @property
-    def match_index(self) ->'int':
+    def match_index(self) -> 'int':
         """Gets the token's regular expression matching group index"""
         return self._match_index
 
     @property
-    def exclusions(self) ->'list[str]':
-        """Gets the token grops this definition excludes"""
+    def exclusions(self) -> 'list[str]':
+        """Gets the token definition exclusion groups"""
         return self._excludes
 
-    def has_decorator(self, decorator: 'str') ->'bool':
+    @property
+    def decorators(self) -> 'list[str]':
+        """Gets the token definition decorators"""
+        return self._decorators
+
+    def has_decorator(self, decorator: 'str') -> 'bool':
         """Returns whether the token definition has the specified decorator"""
         return decorator in self._decorators
 
-    def excludes_kind(self, token_kind: 'str') ->'bool':
+    def has_any_decorator(self, *decorators: 'str') -> 'bool':
+        """Returns whether the token definition has at least one of the specified decorators"""
+        for decorator in decorators:
+            if decorator in self._decorators:
+                return True
+        return False
+
+    def excludes_kind(self, token_kind: 'str') -> 'bool':
         """Returns whether the token definition excludes the specified token group"""
         return token_kind in self._excludes
 
@@ -160,12 +172,12 @@ class KindDef(GrammarNodeDefinition):
         self._is_group: 'bool' = len(values) > 1
 
     @property
-    def is_regex(self) ->'bool':
+    def is_regex(self) -> 'bool':
         """Gets whether the group values are regular expressions (defaults to True)"""
         return self._is_regex
 
     @property
-    def is_group(self) ->'bool':
+    def is_group(self) -> 'bool':
         """Gets whether the token group has more than one value"""
         return self._is_group
 
@@ -183,32 +195,32 @@ class RuleDef(GrammarNodeDefinition):
         self._index = source_index
 
     @property
-    def index(self) ->'int':
+    def index(self) -> 'int':
         """Gets the character index in the grammar file where the rule occurs"""
         return self._index
 
     @property
-    def is_alternative(self) ->'bool':
+    def is_alternative(self) -> 'bool':
         """Gets whether the rule has more than one definition"""
         return len(self.entries) > 1
 
     @property
-    def has_scope(self) ->'bool':
+    def has_scope(self) -> 'bool':
         """Gets whether the rule has the `scope` attribute"""
         return 'scope' in self.attributes
 
     @property
-    def has_key(self) ->'bool':
+    def has_key(self) -> 'bool':
         """Gets whether the rule has the `key` attribute"""
         return 'key' in self.attributes
 
     @property
-    def key(self) ->'str | None':
+    def key(self) -> 'str | None':
         """Gets the rule `key` attribute value"""
         return self.attributes.get('key')
 
     @property
-    def scope(self) ->'str | None':
+    def scope(self) -> 'str | None':
         """Gets the rule `scope` attribute value"""
         return self.attributes.get('scope')
 
@@ -231,26 +243,26 @@ class RuleDef(GrammarNodeDefinition):
         self.entries.append(new_entry)
         return new_entry
 
-    def has(self, attr: 'str') ->'bool':
+    def has(self, attr: 'str') -> 'bool':
         """Returns whether the rule has the specified attribute `attr`"""
         return attr in self.attributes
 
-    def has_directive(self, directive: 'str') ->'bool':
+    def has_directive(self, directive: 'str') -> 'bool':
         """Returns whether the rule has the specified directive"""
         return directive in self.directives
 
-    def get(self, attr: 'str', default=None) ->'bool':
+    def get(self, attr: 'str', default=None) -> 'bool':
         """Returns the specified directive value, or None otherwise"""
         return self.attributes.get(attr, default)
 
-    def add_attribute(self, attrib_key: 'str', value: 'str') ->'bool':
+    def add_attribute(self, attrib_key: 'str', value: 'str') -> 'bool':
         """Adds an attribute to the rule"""
         if attrib_key not in self.attributes:
             self.attributes[attrib_key] = value
             return True
         return False
 
-    def add_directive(self, directive: 'str') ->'bool':
+    def add_directive(self, directive: 'str') -> 'bool':
         """Adds an directive to the rule"""
         if directive not in self.attributes:
             self.directives.append(directive)
@@ -270,10 +282,10 @@ class NodeGroup:
         self.capture: 'str' = '_'
         self.index = 0
 
-    def __str__(self) ->'str':
+    def __str__(self) -> 'str':
         return f"Group: (refs: {len(self.refs)}, mode: {self.mode.name}, count: {self.count.name}, entry: {self.parent is not None})"
 
-    def __len__(self) ->'int':
+    def __len__(self) -> 'int':
         return len(self.refs)
 
     def __getitem__(self, key: 'int') -> 'tuple[GrammarNodeReference | NodeGroup, str | Sequence[str]]':
@@ -327,7 +339,7 @@ class NodeGroup:
         return refs
 
     @property
-    def has_capture(self) ->'bool':
+    def has_capture(self) -> 'bool':
         """Gets whether this group has defined a capture name"""
         return self.capture != '_'
 
@@ -355,11 +367,11 @@ class GrammarNodeReference(GrammarNode):
         self.count: 'NodeCount' = count
         self.capture: 'str' = '_'
 
-    def __str__(self) ->'str':
+    def __str__(self) -> 'str':
         return f"{super().__str__()}: (value: {repr(self.value)}, count: {self.count.name}, capture: {repr(self.capture)})"
 
     @property
-    def has_capture(self) ->'bool':
+    def has_capture(self) -> 'bool':
         """Gets whether this node has defined a capture name"""
         return self.capture != '_'
 
@@ -386,7 +398,7 @@ class RuleRef(GrammarNodeReference):
         self._index = source_index
 
     @property
-    def index(self) ->'int':
+    def index(self) -> 'int':
         """Gets the character index in the grammar where this reference occurs"""
         return self._index
 
