@@ -49,6 +49,13 @@ __all__ = [
     'TPL_MAIN',
     'TPL_SOURCE_CLASS_1',
     'TPL_SOURCE_CLASS_2',
+    'TPL_RELFILEPATH',
+    'TPL_ABSFILEPATH',
+    'TPL_RELDIRPATH',
+    'TPL_ABSDIRPATH',
+    'TPL_ENSURERELATIVE',
+    'TPL_ENSUREABSOLUTE',
+    'TPL_LOADANDPARSE',
 ]
 
 # endregion (exports)
@@ -96,7 +103,9 @@ TPL_DEPENDENCIES = """import re
 import json
 import time
 import io
+import os
 
+from pathlib import Path
 from argparse import ArgumentParser, Namespace, FileType
 from colorama import just_fix_windows_console, Fore, Back, Style
 from dataclasses import dataclass
@@ -113,6 +122,8 @@ scope_stack = []
 verbosity_stack = []
 # helps to avoid pushing/popping scopes when testing rules
 scopes_enabled = True
+# The final AST: keys should be absolute filenames, values should be module nodes
+abstract_syntax_tree = {}
 """
 
 TPL_CONSTANTS = """
@@ -362,33 +373,111 @@ def declare(identifier_key, node, kind):
 
 """
 
+
+TPL_RELFILEPATH = """if os.path.isabs(m_path) or os.path.isdir(m_path) or not os.path.exists(m_path):
+    m_path_valid = False
+    m_path_message = f"Expected an existing relative file path"
+    m_path_error = True
+"""
+
+TPL_ABSFILEPATH = """if not os.path.isabs(m_path) or os.path.isdir(m_path) or not os.path.exists(m_path):
+    m_path_valid = False
+    m_path_message = f"Expected an existing absolute file path"
+    m_path_error = True
+"""
+
+TPL_RELDIRPATH = """if os.path.isabs(m_path) or os.path.isfile(m_path) or not os.path.exists(m_path):
+    m_path_valid = False
+    m_path_message = f"Expected an existing relative directory path"
+    m_path_error = True
+"""
+
+TPL_ABSDIRPATH = """if not os.path.isabs(m_path) or os.path.isfile(m_path) or not os.path.exists(m_path):
+    m_path_valid = False
+    m_path_message = f"Expected an existing absolute directory path"
+    m_path_error = True
+"""
+
+TPL_ENSURERELATIVE = """if os.path.isabs(m_path):
+    try:
+        m_path = os.path.relpath(os.getcwd())
+    except ValueError:
+        m_path_valid = False
+        m_path_message = "Path is not a subpath of current working directory"
+        m_path_error = True
+"""
+
+TPL_ENSUREABSOLUTE = """if not os.path.isabs(m_path):
+    try:
+        m_path = os.path.abspath(m_path)
+    except RuntimeError:
+        m_path_valid = False
+        m_path_message = "Unable to resolve path as absolute"
+        m_path_error = True
+"""
+
+TPL_LOADANDPARSE = """if os.path.isfile(m_path) and os.path.exists(m_path):
+    spath = os.path.abspath(os.path.normpath(m_path))
+    try:
+        parse(spath)
+    except Exception as e:
+        log(True, error=f"Unable to parse file: {', '.join(str(arg) for arg in e.args)}")
+"""
+
+
 TPL_API = """
-def parse(source_fname, output_ast_fname, start_rule, verbosity):
+def parse(source_fname, start_rule='{start_rule}', verbosity='error'):
     ""\"Parsers a source file and generates an abstract syntax tree of the source.\"""
     global source
 
-    message = f"Started parsing file {source_fname}"
-    header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
-    print(header)
+    saved_cwd: str = os.getcwd()
+    cwd_path = os.path.dirname(source_fname)
+    cwf_path = os.path.basename(source_fname)
+    os.chdir(cwd_path)
+    abspath = os.path.abspath(os.path.normpath(cwf_path))
 
-    main_rule = f'match_{snakefy(start_rule)}'
-    rule_callback = globals().get(main_rule, lambda: { 'kind': 'NO_AST', 'message': f'{start_rule} not defined' })
+    if abspath not in abstract_syntax_tree:
 
-    with open(source_fname, 'r', encoding='utf8') as fp:
-        source_contents = fp.read()
+        abstract_syntax_tree[abspath] = {{ 'kind': 'CURRENTLY_PARSING' }}
 
-    source = Source(source_contents, source_contents, source_fname, VERB_LEVELS.get(verbosity, ERROR))
-    source.skip()
+        message = f"Started parsing file {{source_fname}}"
+        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
 
-    ptime = time.process_time()
-    ast = rule_callback()
-    delta = time.process_time() - ptime
+        main_rule = f'match_{{snakefy(start_rule)}}'
+        rule_callback = globals().get(main_rule, lambda: {{ 'kind': 'NO_AST', 'message': f'{start_rule} not defined' }})
 
-    message = f"Finished parsing file {source_fname} (took {delta:.4f} seconds)"
-    header = f"{Fore.BLACK}{Back.CYAN}INFO: {Style.BRIGHT}{Fore.CYAN}{Back.BLACK} {message}{Style.RESET_ALL}"
-    print(header)
+        with open(cwf_path, 'r', encoding='utf8') as fp:
+            source_contents = fp.read()
 
-    return ast
+        saved_source = source
+        kept_verb: str = saved_source.verbosity.name.lower() if saved_source else verbosity
+        source = Source(source_contents, source_contents, source_fname, VERB_LEVELS.get(kept_verb, ERROR))
+        source.skip()
+
+        ptime = time.process_time()
+        ast = rule_callback()
+        delta = time.process_time() - ptime
+
+        abstract_syntax_tree[abspath] = ast
+
+        source = saved_source
+        os.chdir(saved_cwd)
+
+        message = f"Finished parsing file {{source_fname}} (took {{delta:.4f}} seconds)"
+        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
+
+    else:
+        ast = abstract_syntax_tree.get(abspath)
+        if ast.get('kind', '') == 'CURRENTLY_PARSING':
+            message = f"Cyclic reference detected in {{source_fname}}"
+            header = f"{{Fore.BLACK}}{{Back.YELLOW}}WARNING: {{Style.BRIGHT}}{{Fore.YELLOW}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+            print(header)
+
+        message = f"File {{source_fname}} was previously parsed. Skipping..."
+        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
 
 """
 
@@ -397,30 +486,31 @@ TPL_MAIN = """just_fix_windows_console()
 parser = ArgumentParser()
 parser.add_argument('source', help="The source file path", type=FileType('r', encoding='utf8'))
 parser.add_argument('-o', '--out', help="The AST output file path", type=FileType('w', encoding='utf8'), required=True)
-parser.add_argument('-s', '--start', help="Set starting rule to parse", type=str, required=True)
+parser.add_argument('-s', '--start', help="Set starting rule to parse", type=str, default='{start_rule}')
 parser.add_argument('-v', '--verbosity', help="Set the verbosity level", choices=['error', 'warning', 'debug1', 'success', 'debug2', 'info', 'debug3', 'all'], default='error')
 
 args: Namespace = parser.parse_args()
 
-ast = parse(args.source.name, args.out.name, args.start, args.verbosity)
+abspath = os.path.abspath(os.path.normpath(args.source.name))
+parse(abspath, args.start, args.verbosity)
 
-if ast:
+if abstract_syntax_tree:
     try:
-        json.dump(ast, args.out, indent=2)
+        json.dump(abstract_syntax_tree, args.out, indent=2)
         done = True
     except Exception as e:
         done = False
-        message = f"Failed to save ast into file: {' '.join(repr(arg) for arg in e.args)}"
-        header = f"{Fore.BLACK}{Back.RED}ERROR: {Style.BRIGHT}{Fore.RED}{Back.BLACK} {message}{Style.RESET_ALL}"
+        message = f"Failed to save ast into file: {{' '.join(repr(arg) for arg in e.args)}}"
+        header = f"{{Fore.BLACK}}{{Back.RED}}ERROR: {{Style.BRIGHT}}{{Fore.RED}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
         print(header)
 
     if done:
-        message = f"Saved AST into file: '{args.out.name}'"
-        header = f"{Fore.BLACK}{Back.GREEN}SUCCESS: {Style.BRIGHT}{Fore.GREEN}{Back.BLACK} {message}{Style.RESET_ALL}"
+        message = f"Saved AST into file: '{{args.out.name}}'"
+        header = f"{{Fore.BLACK}}{{Back.GREEN}}SUCCESS: {{Style.BRIGHT}}{{Fore.GREEN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
         print(header)
 else:
     message = "Done without significative output"
-    header = f"{Fore.BLACK}{Back.YELLOW}WARNING: {Style.BRIGHT}{Fore.YELLOW}{Back.BLACK} {message}{Style.RESET_ALL}"
+    header = f"{{Fore.BLACK}}{{Back.YELLOW}}WARNING: {{Style.BRIGHT}}{{Fore.YELLOW}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
     print(header)
 
 return 0
