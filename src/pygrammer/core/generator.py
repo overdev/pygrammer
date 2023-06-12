@@ -34,6 +34,7 @@ import sys
 from enum import Enum
 from typing import Any, Sequence
 from contextlib import contextmanager
+from colorama import Fore, Back, Style
 from .grammar import *
 from .parser import *
 from .templates import *
@@ -60,6 +61,8 @@ source: "Source" = None
 gen_templates: dict[str, str] = {
     're_consts': '',
 }
+
+start_rule: str = ''
 
 # endregion (globals)
 # ---------------------------------------------------------
@@ -501,14 +504,14 @@ def compose_parser():
             composer.template_exact(TPL_UTILITIES)
 
         with composer.region("parser API"):
-            composer.template_exact(TPL_API)
+            composer.template_exact(TPL_API, start_rule=grammar.start_rule.name)
 
             compose_token_definitions()
             compose_kind_definitions()
             compose_rule_definitions()
 
         with composer.func_def("main", [], "Parser's CLI entry point.", empty_before=3, empty_after=1):
-            composer.template(TPL_MAIN)
+            composer.template(TPL_MAIN, start_rule=grammar.start_rule.name)
 
     composer.dashed_line()
 
@@ -543,12 +546,23 @@ def compose_kind_definitions():
 
 def compose_rule_definitions():
     """Composes all rule definitions"""
+    global start_rule
+
+    entry_rule: RuleDef = None
     with composer.region("rule definitions"):
         for name, ruledef in grammar.rules.items():
+            if ruledef.has_directive("start"):
+                entry_rule = ruledef
             compose_ruledef(name, ruledef)
 
+    if entry_rule is None:
+        source.error(f"No starting rule: Please, apply the {Fore.MAGENTA}start{Fore.RED} directive to a rule of your choosing.")
+    elif source.verbosity >= INFO:
+        source.info(f"Starting rule: {Fore.MAGENTA}{entry_rule.name}", localized=False)
+    start_rule = entry_rule.name
 
-def compose_def_body(suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
+
+def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
     """Composes the functions for parsing tokens"""
     with composer.func_def(f"is_{suffix}", [], docstring):
         composer.line("location = source.location")
@@ -564,19 +578,73 @@ def compose_def_body(suffix: "str", docstring: "str", const_name: "str", regex_s
                 for exclusion in excludes:
                     if kind := grammar.kinds.get(exclusion):
                         value = '|'.join(kind.values)
-                        with composer.if_stmt(f"m_{snakefy(exclusion)} := RE_{exclusion}.fullmatch(m_{suffix}[0])"):
+                        with composer.if_stmt(f"m_{snakefy(exclusion)} := RE_{exclusion}.fullmatch(m_{suffix}[{match_index}])"):
                             with composer.if_stmt(f"not advance"):
                                 composer.line(f"return False")
                             composer.line(f"log(True, error='Expected {const_name}, got {exclusion}')")
                     else:
                         source.error(f"{const_name} exclusion '{exclusion}' is not defined")
 
-            with composer.if_stmt("advance"):
-                composer.line(f"m = source.expect_regex(RE_{const_name}, advance)")
-                composer.line(f"log(False, debug3=f\"\"\"Matched token RE_{const_name} at line {{location[1]}}, {{location[2]}}: '{{m[0]}}'\"\"\")")
-                composer.line(f"return {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ] }}")
-            with composer.else_stmt():
-                composer.line(f"return True")
+            if isinstance(definition, TokenDef) and definition.has_any_decorator(DCR_RELFILEPATH, DCR_ABSFILEPATH, DCR_RELDIRPATH, DCR_ABSDIRPATH, DCR_ENSURERELATIVE, DCR_ENSUREABSOLUTE, DCR_LOADANDPARSE):
+                composer.line(f"m_path: str = m_{suffix}[{match_index}]")
+                composer.line(f"m_path_valid: bool = True")
+                composer.line(f"m_path_error: bool = False")
+                composer.line(f"m_path_message: str = ''")
+                composer.line(f"submodule: 'dict | None' = None")
+                path_kind = "'PATH'"
+
+                if definition.has_decorator(DCR_RELFILEPATH):
+                    composer.template(TPL_RELFILEPATH)
+                    path_kind = "'FILE_PATH_RELATIVE'"
+
+                if definition.has_decorator(DCR_ABSFILEPATH):
+                    composer.template(TPL_ABSFILEPATH)
+                    path_kind = "'FILE_PATH_ABSOLUTE'"
+
+                if definition.has_decorator(DCR_RELDIRPATH):
+                    composer.template(TPL_RELDIRPATH)
+                    path_kind = "'DIRECTORY_PATH_RELATIVE'"
+
+                if definition.has_decorator(DCR_ABSDIRPATH):
+                    composer.template(TPL_ABSDIRPATH)
+                    path_kind = "'DIRECTORY_PATH_ABSOLUTE'"
+
+                if definition.has_decorator(DCR_ENSURERELATIVE):
+                    composer.template(TPL_ENSURERELATIVE)
+                    path_kind = path_kind.replace('ABSOLUTE', 'RELATIVE')
+
+                if definition.has_decorator(DCR_ENSUREABSOLUTE):
+                    composer.template(TPL_ENSUREABSOLUTE)
+                    path_kind = path_kind.replace('RELATIVE', 'ABSOLUTE')
+
+                with composer.if_stmt("not m_path_valid"):
+                    with composer.if_stmt("advance"):
+                        with composer.if_stmt("m_path_error"):
+                            composer.line("log(True, error=m_path_message)")
+                        with composer.else_stmt():
+                            composer.line("log(True, warning=m_path_message)")
+                    with composer.else_stmt():
+                            composer.line("return False")
+
+                with composer.else_stmt():
+                    if definition.has_decorator(DCR_LOADANDPARSE):
+                        with composer.if_stmt("advance"):
+                            composer.line(f"source.expect_regex(RE_{const_name}, advance)")
+                            composer.template(TPL_LOADANDPARSE)
+                        composer.line(f"return {{ 'kind': 'SUBMODULE', 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ] }}")
+                    else:
+                        with composer.if_stmt("advance"):
+                            composer.line(f"source.expect_regex(RE_{const_name}, advance)")
+                            composer.line(f"return {{ 'kind': {path_kind}, 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ] }}")
+                        with composer.else_stmt():
+                            composer.line("return True")
+            else:
+                with composer.if_stmt("advance"):
+                    composer.line(f"m = source.expect_regex(RE_{const_name}, advance)")
+                    composer.line(f"log(False, debug3=f\"\"\"Matched token RE_{const_name} at line {{location[1]}}, {{location[2]}}: '{{m[{match_index}]}}'\"\"\")")
+                    composer.line(f"return {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ] }}")
+                with composer.else_stmt():
+                    composer.line(f"return True")
 
         composer.line(f"return None if advance else False")
 
@@ -606,7 +674,7 @@ def compose_tokendef(token_name: "str", token: "TokenDef"):
         f"RE_{const_name}: re.Pattern = re.compile(r{regex_str})\n"
     )
 
-    compose_def_body(suffix, docstring, const_name, regex_str, token.match_index, token.exclusions)
+    compose_def_body(token, suffix, docstring, const_name, regex_str, token.match_index, token.exclusions)
 
 
 # endregion (TOKEN)
@@ -627,7 +695,7 @@ def compose_kinddef(kind_name: "str", kind: "KindDef"):
         f"RE_{const_name}: re.Pattern = re.compile(r{regex_str})\n"
     )
 
-    compose_def_body(suffix, docstring, const_name, regex_str, 0, None)
+    compose_def_body(kind, suffix, docstring, const_name, regex_str, 0, None)
 
 
 # endregion (KIND)
