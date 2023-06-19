@@ -495,6 +495,10 @@ def compose_parser():
             for name, tokendef in grammar.tokens.items():
                 if tokendef.has_decorator(DCR_SKIP):
                     with composer.if_stmt(f"m := self.match_regex(r'''{tokendef.value}''', skip=False)"):
+                        if tokendef.has_decorator(DCR_GRABTOKEN):
+                            composer.line("location = source.location")
+                            composer.line(f"token = {{ 'kind': '{name}', 'value': m[{tokendef.match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify('{snakefy(name)}') }}")
+                            composer.line("grab_token(token)")
                         composer.line("continue")
 
         composer.template_exact(TPL_SOURCE_CLASS_2)
@@ -570,7 +574,7 @@ def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring:
             composer.line(f"return True")
         composer.line(f"return False")
 
-    with composer.func_def(f"match_{suffix}", ["advance=True"], docstring):
+    with composer.func_def(f"match_{suffix}", ["advance=True", f"token_classifier='{suffix}'"], docstring):
         composer.line("location = source.location")
 
         with composer.if_stmt(f"m_{suffix} := source.match_regex(RE_{const_name}, False)"):
@@ -631,26 +635,32 @@ def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring:
                         with composer.if_stmt("advance"):
                             composer.line(f"source.expect_regex(RE_{const_name}, advance)")
                             composer.template(TPL_LOADANDPARSE)
-                        composer.line(f"return {{ 'kind': 'SUBMODULE', 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ] }}")
+                        composer.line(f"token = {{ 'kind': 'SUBMODULE', 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
+                        composer.line(f"grab_token(token)")
+                        composer.line(f"return token")
                     else:
                         with composer.if_stmt("advance"):
                             composer.line(f"source.expect_regex(RE_{const_name}, advance)")
-                            composer.line(f"return {{ 'kind': {path_kind}, 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ] }}")
+                            composer.line(f"token {{ 'kind': {path_kind}, 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
+                            composer.line(f"grab_token(token)")
+                            composer.line(f"return token")
                         with composer.else_stmt():
                             composer.line("return True")
             else:
                 with composer.if_stmt("advance"):
                     composer.line(f"m = source.expect_regex(RE_{const_name}, advance)")
                     composer.line(f"log(False, debug3=f\"\"\"Matched token RE_{const_name} at line {{location[1]}}, {{location[2]}}: '{{m[{match_index}]}}'\"\"\")")
-                    composer.line(f"return {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ] }}")
+                    composer.line(f"token = {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
+                    composer.line(f"grab_token(token)")
+                    composer.line(f"return token")
                 with composer.else_stmt():
                     composer.line(f"return True")
 
         composer.line(f"return None if advance else False")
 
-    with composer.func_def(f"expect_{suffix}", [], docstring):
+    with composer.func_def(f"expect_{suffix}", [f"token_classifier='{suffix}'"], docstring):
         composer.line("location = source.location")
-        with composer.if_stmt(f"m_{suffix} := match_{suffix}()"):
+        with composer.if_stmt(f"m_{suffix} := match_{suffix}(token_classifier=token_classifier)"):
             composer.line(f"return m_{suffix}")
         composer.line(f"log(True, error='Expected {const_name}')")
 
@@ -729,6 +739,10 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         composer.line(f"node = {{ 'kind': '{node_kind}' }}")
 
+        if rule.has_directive("classify"):
+            with composer.if_stmt('not just_checking'):
+                composer.line(f'push_classifier("{suffix}")')
+
         if rule.has("scope"):
             composer.line(f"log(False, debug2=f'Entering {rule_name} scope')")
             composer.line(f"push_scope(just_checking)")
@@ -755,6 +769,10 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         if verbosity := rule.get("verbosity"):
             composer.line(f"pop_verb(True)")
+
+        if rule.has_directive("classify"):
+            with composer.if_stmt('not just_checking'):
+                composer.line(f'pop_classifier()')
 
         if rule.has_key:
             if rule.has("flip"):
@@ -948,9 +966,25 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
     cap = kwargs.get("use_capture", ref.capture).lstrip("*")
     should_merge_rule: "bool" = False
     has_lookup: "bool" = False
+
+    must_grab = '^' not in cap and cap != '_'
+    if not must_grab:
+        cap = cap.replace('^', '')
+
     if "." in cap:
         cap, lookup = cap.split(".", 2)
         has_lookup = True
+
+    cap_is_kind = cap.isupper()
+    if cap_is_kind:
+        tkind = grammar.kinds.get(cap)
+        if not tkind:
+            tkind = grammar.tokens.get(cap)
+        if not tkind:
+            source.index = ref.index
+            source.error(f"Token definition assigned for capture not found: '{cap}'")
+
+    cap_class = f'token_classifier="{snakefy(cap)}"' if must_grab or cap_is_kind else f'token_classifier=None'
     test_chained = kwargs.get("test_chained", False)
     supress_init_one = kwargs.get("supress_init_one", False)
     return_test = kwargs.get("return_test", False)
@@ -966,13 +1000,22 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
             stmt = "elif" if test_chained else "if"
 
         if isinstance(ref, TokenRef):
-            val = escape_token(ref.value)
-            call = f"is_token(r'{val}')"
+            if cap_is_kind:
+                call = f"is_{snakefy(cap)}()"
+            else:
+                val = escape_token(ref.value)
+                call = f"is_token(r'{val}')"
 
         elif isinstance(ref, KindRef):
+            if cap_is_kind:
+                source.index = ref.index
+                source.error(f"capture name for token reference {ref.value} cannot be ALL_CAPS")
             call = f"is_{snakefy(ref.value)}()"
 
         elif isinstance(ref, RuleRef):
+            if cap_is_kind:
+                source.index = ref.index
+                source.error(f"capture name for rule reference {ref.value} cannot be ALL_CAPS")
             rule: "RuleDef" = grammar.get_rule(ref.value)
             if rule is None:
                 source.index = ref.index
@@ -986,17 +1029,29 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
 
     elif action == "capture":
         if isinstance(ref, TokenRef):
-            kind = "TOKEN"
-            val = escape_token(ref.value)
-            mcall = f"match_token(r'{val}')"
-            call = mcall if is_optional else f"expect_token(r'{val}')"
+            if cap_is_kind:
+                kind = cap
+                cap = snakefy(cap)
+                mcall = f"match_{cap}({cap_class})"
+                call = mcall if is_optional else f"expect_{cap}({cap_class})"
+            else:
+                val = escape_token(ref.value)
+                kind = "TOKEN"
+                mcall = f"match_token(r'{val}', {cap_class})"
+                call = mcall if is_optional else f"expect_token(r'{val}', {cap_class})"
 
         elif isinstance(ref, KindRef):
+            if cap_is_kind:
+                source.index = ref.index
+                source.error(f"capture name for token reference {ref.value} cannot be ALL_CAPS")
             kind = snakefy(ref.value).upper()
-            mcall = f"match_{snakefy(ref.value)}()"
-            call = mcall if is_optional else f"expect_{snakefy(ref.value)}()"
+            mcall = f"match_{snakefy(ref.value)}({cap_class})"
+            call = mcall if is_optional else f"expect_{snakefy(ref.value)}({cap_class})"
 
         elif isinstance(ref, RuleRef):
+            if cap_is_kind:
+                source.index = ref.index
+                source.error(f"capture name for rule reference {ref.value} cannot be ALL_CAPS")
             rule: "RuleDef" = grammar.get_rule(ref.value)
             if rule is None:
                 source.index = ref.index
