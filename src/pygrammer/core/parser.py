@@ -564,46 +564,34 @@ def parse_kind_definition(section_name: "str", section_spec: "str", grammar_node
         grammar.info(f"Kind added: {kind_definition.name}", localized=False)
 
 
-def parse_rule_attributes(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
-    """Parses a rule attribute"""
+def parse_rule_attribute_or_directive(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
+    """Parses a single rule attribute or directive"""
     re_word: "str" = r"\w+"
-    attrib_key: "str" = ""
-    attrib_val: "str | bool"
+    match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
+
+    if grammar.match_regex(r":"):
+        match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
+
+        if not rule.add_attribute(match_key[0], match_value[0]):
+            grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
+        elif verbosity >= INFO:
+            grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
+
+    else:
+        if not rule.add_directive(match_key[0]):
+            grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
+        elif verbosity >= INFO:
+            grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+
+def parse_rule_attributes(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
+    """Parses a set of rule attributes or directives"""
 
     if grammar.match_regex(RE_RULE_ATTRIB):
         grammar.expect_regex(r"\{")
-        match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
-
-        if grammar.match_regex(r":"):
-            match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
-
-            if not rule.add_attribute(match_key[0], match_value[0]):
-                grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
-            elif verbosity >= INFO:
-                grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
-
-        else:
-            if not rule.add_directive(match_key[0]):
-                grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
-            elif verbosity >= INFO:
-                grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+        parse_rule_attribute_or_directive(rule, verbosity)
 
         while grammar.match_regex(r","):
-            match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
-
-            if grammar.match_regex(r":"):
-                match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
-
-                if not rule.add_attribute(match_key[0], match_value[0]):
-                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
-                elif verbosity >= INFO:
-                    grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
-
-            else:
-                if not rule.add_directive(match_key[0]):
-                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
-                elif verbosity >= INFO:
-                    grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+            parse_rule_attribute_or_directive(rule, verbosity)
 
         grammar.expect_regex(r"\}")
 
