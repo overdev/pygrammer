@@ -52,6 +52,7 @@ __all__ = [
     "DCR_BLOCKCOMMENT",
     "DCR_SKIP",
     "DCR_EXPAND",
+    "DCR_GRABTOKEN",
     "DCR_INTERNAL",
     'DCR_RELFILEPATH',
     'DCR_ABSFILEPATH',
@@ -136,6 +137,7 @@ DCR_SKIP = "skip"
 DCR_EXPAND = "expand"
 DCR_INTERNAL = "internal"
 DCR_GETTER = "getter"
+DCR_GRABTOKEN = "grabtoken"
 DCR_RELFILEPATH = "relfilepath"
 DCR_ABSFILEPATH = "absfilepath"
 DCR_RELDIRPATH = "reldirpath"
@@ -152,6 +154,7 @@ DECORATORS = [
     DCR_EXPAND,
     DCR_INTERNAL,
     DCR_GETTER,
+    DCR_GRABTOKEN,
     DCR_RELFILEPATH,
     DCR_ABSFILEPATH,
     DCR_RELDIRPATH,
@@ -670,13 +673,13 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
         index = grammar.index
 
         if match_item := grammar.match_regex(RE_TOKEN_INSTANCE):
-            ref = TokenRef(match_item[2])
+            ref = TokenRef(match_item[2], source_index=index)
             refs.append(ref)
             continue
 
         if match_item := grammar.match_regex(RE_KIND_INSTANCE):
             cnt = COUNT_MAP.get(match_item[2], NC_ONE)
-            ref = KindRef(match_item[1], count=cnt)
+            ref = KindRef(match_item[1], count=cnt, source_index=index)
             refs.append(ref)
             continue
 
@@ -751,14 +754,14 @@ def parse_entry_capture(refs: "Sequence[GrammarNodeReference | NodeGroup]", node
             closed = True
             break
 
-        if capt_match := grammar.match_regex(r"(\*)?(\w+)(\.\w+)?"):
+        if capt_match := grammar.match_regex(r"(\*)?(\^)?(\w+)(\.\w+)?"):
             captures.append(capt_match[0])
             capt_sequence = capt_match[1]
 
-            if capt_match[3]:
-                capture = f"{capt_match[2]}.{capt_match[3]}"
+            if capt_match[4]:
+                capture = f"{capt_match[3]}.{capt_match[4]}"
             else:
-                capture = capt_match[2]
+                capture = capt_match[3]
 
             if capt_sequence:
                 node[capture] = []
