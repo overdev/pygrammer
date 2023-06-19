@@ -124,6 +124,10 @@ verbosity_stack = []
 scopes_enabled = True
 # The final AST: keys should be absolute filenames, values should be module nodes
 abstract_syntax_tree = {}
+# Token clasification
+token_classifiers = []
+# Token stream
+token_stream = []
 """
 
 TPL_CONSTANTS = """
@@ -197,23 +201,27 @@ def is_token(*regexes):
             return True
     return False
 
-def match_token(*regexes):
+def match_token(*regexes, token_classifier='any'):
     ""\"Tries to match an immediate token 'value' and returns its node, or None otherwise""\"
     global source
     location = source.location
     for regex in regexes:
         if m := source.match_regex(regex):
             log(False, debug3=f"Matched token with regex ```{ regex }``` at line {location[1]}, {location[2]}: '{m[0]}'")
-            return { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ] }
+            token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
+            grab_token(token)
+            return token
     return None
 
-def expect_token(*regexes):
+def expect_token(*regexes, token_classifier='any'):
     \"""Demands the source in current position to match one of the given token values and returns its node or aborts with an error.""\"
     global source
     location = source.location
     for regex in regexes:
         if m := source.expect_regex(regex):
-            return { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ] }
+            token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
+            grab_token(token)
+            return token
     return None
 
 def log(localized=False, **messages):
@@ -371,6 +379,32 @@ def declare(identifier_key, node, kind):
     else:
         source.error("No active scope")
 
+def push_classifier(classifier):
+    \"""Pushes a token classifier""\"
+    global token_classifiers
+    token_classifiers.append(classifier)
+
+def pop_classifier():
+    \"""Pops a token classifier""\"
+    global token_classifiers
+    token_classifiers.pop()
+
+def classify(token_kind):
+    global token_classifiers
+    clfr = '.'.join(token_classifiers)
+    if clfr and token_kind:
+        return f"{'.'.join(token_classifiers)}.{token_kind}"
+    elif clfr:
+        return clfr
+    elif token_kind:
+        return token_kind
+    else:
+        return "other"
+
+def grab_token(token):
+    global token_stream
+    token_stream.append(token)
+
 """
 
 
@@ -488,13 +522,29 @@ parser.add_argument('source', help="The source file path", type=FileType('r', en
 parser.add_argument('-o', '--out', help="The AST output file path", type=FileType('w', encoding='utf8'), required=True)
 parser.add_argument('-s', '--start', help="Set starting rule to parse", type=str, default='{start_rule}')
 parser.add_argument('-v', '--verbosity', help="Set the verbosity level", choices=['error', 'warning', 'debug1', 'success', 'debug2', 'info', 'debug3', 'all'], default='error')
+parser.add_argument('-t', '--tokenize', help="Generates a stream of tokens instead of an AST", action='store_true')
 
 args: Namespace = parser.parse_args()
 
 abspath = os.path.abspath(os.path.normpath(args.source.name))
 parse(abspath, args.start, args.verbosity)
 
-if abstract_syntax_tree:
+if args.tokenize:
+    try:
+        json.dump(token_stream, args.out, indent=2)
+        done = True
+    except Exception as e:
+        done = False
+        message = f"Failed to save token stream into file: {{' '.join(repr(arg) for arg in e.args)}}"
+        header = f"{{Fore.BLACK}}{{Back.RED}}ERROR: {{Style.BRIGHT}}{{Fore.RED}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
+
+    if done:
+        message = f"Saved Token stream into file: '{{args.out.name}}'"
+        header = f"{{Fore.BLACK}}{{Back.GREEN}}SUCCESS: {{Style.BRIGHT}}{{Fore.GREEN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
+
+elif abstract_syntax_tree:
     try:
         json.dump(abstract_syntax_tree, args.out, indent=2)
         done = True
