@@ -361,14 +361,20 @@ class NodeGroup:
 class GrammarNodeReference(GrammarNode):
     """Represents a reference to a Token or Rule definition"""
 
-    def __init__(self, value: 'str', count: 'NodeCount' = NC_ONE):
+    def __init__(self, value: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
         super().__init__()
         self.value: 'str' = value
         self.count: 'NodeCount' = count
         self.capture: 'str' = '_'
+        self._index = source_index
 
     def __str__(self) -> 'str':
         return f"{super().__str__()}: (value: {repr(self.value)}, count: {self.count.name}, capture: {repr(self.capture)})"
+
+    @property
+    def index(self) -> 'int':
+        """Gets the character index in the grammar where this reference occurs"""
+        return self._index
 
     @property
     def has_capture(self) -> 'bool':
@@ -379,28 +385,22 @@ class GrammarNodeReference(GrammarNode):
 class TokenRef(GrammarNodeReference):
     """Represents a reference to a Token definition"""
 
-    def __init__(self, value: 'str', count: 'NodeCount' = NC_ONE):
-        super().__init__(value, count)
+    def __init__(self, value: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
+        super().__init__(value, count, source_index)
 
 
 class KindRef(GrammarNodeReference):
     """Represents a reference to a Token Group definition"""
 
-    def __init__(self, kind_name: 'str', count: 'NodeCount' = NC_ONE):
-        super().__init__(kind_name, count)
+    def __init__(self, kind_name: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
+        super().__init__(kind_name, count, source_index)
 
 
 class RuleRef(GrammarNodeReference):
     """Represents a reference to a Rule definition"""
 
     def __init__(self, rule_name: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
-        super().__init__(rule_name, count)
-        self._index = source_index
-
-    @property
-    def index(self) -> 'int':
-        """Gets the character index in the grammar where this reference occurs"""
-        return self._index
+        super().__init__(rule_name, count, source_index)
 
 # endregion (references)
 
