@@ -474,7 +474,7 @@ def compose_parser():
     with composer.region("exports"):
         composer.empty()
 
-        composer.multiline_list(["'parse'"], "__all__")
+        composer.multiline_list(["'parse'", "'generate_ast'", "'generate_stream'"], "__all__")
 
     composer.dashed_line()
 
@@ -497,8 +497,10 @@ def compose_parser():
                     with composer.if_stmt(f"m := self.match_regex(r'''{tokendef.value}''', skip=False)"):
                         if tokendef.has_decorator(DCR_GRABTOKEN):
                             composer.line("location = source.location")
+                            composer.line(f'current_classifiers = unload_classifiers()')
                             composer.line(f"token = {{ 'kind': '{name}', 'value': m[{tokendef.match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify('{snakefy(name)}') }}")
-                            composer.line("grab_token(token)")
+                            composer.line(f'load_classifiers(current_classifiers, True)')
+                            composer.line("grab_token(token, location)")
                         composer.line("continue")
 
         composer.template_exact(TPL_SOURCE_CLASS_2)
@@ -568,13 +570,13 @@ def compose_rule_definitions():
 
 def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
     """Composes the functions for parsing tokens"""
-    with composer.func_def(f"is_{suffix}", [], docstring):
+    with composer.func_def(f"is_{suffix}", ["value=''"], docstring):
         composer.line("location = source.location")
-        with composer.if_stmt(f"match_{suffix}(False)"):
+        with composer.if_stmt(f"match_{suffix}(value, False)"):
             composer.line(f"return True")
         composer.line(f"return False")
 
-    with composer.func_def(f"match_{suffix}", ["advance=True", f"token_classifier='{suffix}'"], docstring):
+    with composer.func_def(f"match_{suffix}", ["value=''", "advance=True", f"token_classifier='{suffix}'"], docstring):
         composer.line("location = source.location")
 
         with composer.if_stmt(f"m_{suffix} := source.match_regex(RE_{const_name}, False)"):
@@ -636,37 +638,40 @@ def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring:
                             composer.line(f"source.expect_regex(RE_{const_name}, advance)")
                             composer.template(TPL_LOADANDPARSE)
                         composer.line(f"token = {{ 'kind': 'SUBMODULE', 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
-                        composer.line(f"grab_token(token)")
+                        composer.line(f"grab_token(token, location)")
                         composer.line(f"return token")
                     else:
                         with composer.if_stmt("advance"):
                             composer.line(f"source.expect_regex(RE_{const_name}, advance)")
                             composer.line(f"token {{ 'kind': {path_kind}, 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
-                            composer.line(f"grab_token(token)")
+                            composer.line(f"grab_token(token, location)")
                             composer.line(f"return token")
                         with composer.else_stmt():
                             composer.line("return True")
             else:
+                with composer.if_stmt(f"value and not re.fullmatch(value, m_{suffix}[{match_index}])"):
+                    composer.line(f"return None if advance else False")
+
                 with composer.if_stmt("advance"):
                     composer.line(f"m = source.expect_regex(RE_{const_name}, advance)")
                     composer.line(f"log(False, debug3=f\"\"\"Matched token RE_{const_name} at line {{location[1]}}, {{location[2]}}: '{{m[{match_index}]}}'\"\"\")")
                     composer.line(f"token = {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
-                    composer.line(f"grab_token(token)")
+                    composer.line(f"grab_token(token, location)")
                     composer.line(f"return token")
                 with composer.else_stmt():
                     composer.line(f"return True")
 
         composer.line(f"return None if advance else False")
 
-    with composer.func_def(f"expect_{suffix}", [f"token_classifier='{suffix}'"], docstring):
-        composer.line("location = source.location")
-        with composer.if_stmt(f"m_{suffix} := match_{suffix}(token_classifier=token_classifier)"):
+    with composer.func_def(f"expect_{suffix}", ["value=''", f"token_classifier='{suffix}'"], docstring):
+        composer.line("index = source.index")
+        with composer.if_stmt(f"m_{suffix} := match_{suffix}(value, token_classifier=token_classifier)"):
             composer.line(f"return m_{suffix}")
-        composer.line(f"log(True, error='Expected {const_name}')")
+        composer.line(f"source.error('Expected {const_name}', at=index)")
 
-    with composer.func_def(f"parse_{suffix}", [], docstring):
-        composer.line(f"item = expect_{suffix}()")
-        composer.line(f"return item['value']")
+    # with composer.func_def(f"parse_{suffix}", [], docstring):
+    #     composer.line(f"item = expect_{suffix}()")
+    #     composer.line(f"return item['value']")
 
 
 # region TOKEN
@@ -722,6 +727,34 @@ def check_entry(entry: "NodeGroup"):
             source.index = entry.first.index
             source.error("Rule entry cannot start with complex rule references")
 
+def compose_ruledef_classification(rule_name: "str", rule: "RuleDef", suffix: "str", is_pushing: bool):
+    if retroclassifier := rule.get("retroclassify"):
+        with composer.if_stmt('not just_checking'):
+            composer.line(f"retroclassify('{retroclassifier}')")
+
+    if classifier := rule.get("reclassify"):
+        with composer.if_stmt('not just_checking'):
+            if is_pushing:
+                composer.line(f'current_classifiers = unload_classifiers()')
+                composer.line(f'push_classifier("{classifier}")')
+            else:
+                composer.line(f'load_classifiers(current_classifiers, True)')
+
+    elif classifier := rule.get("classify"):
+        with composer.if_stmt('not just_checking'):
+            composer.line(f'push_classifier("{classifier}")' if is_pushing else f'pop_classifier()')
+
+    elif rule.has_directive("reclassify"):
+        with composer.if_stmt('not just_checking'):
+            if is_pushing:
+                composer.line(f'current_classifiers = unload_classifiers()')
+                composer.line(f'push_classifier("{suffix}")')
+            else:
+                composer.line(f'load_classifiers(current_classifiers, True)')
+
+    elif rule.has_directive("classify"):
+        with composer.if_stmt('not just_checking'):
+            composer.line(f'push_classifier("{suffix}")' if is_pushing else f'pop_classifier()')
 
 def compose_ruledef(rule_name: "str", rule: "RuleDef"):
     """Composes the functions for parsing a rule"""
@@ -739,9 +772,7 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         composer.line(f"node = {{ 'kind': '{node_kind}' }}")
 
-        if rule.has_directive("classify"):
-            with composer.if_stmt('not just_checking'):
-                composer.line(f'push_classifier("{suffix}")')
+        compose_ruledef_classification(rule_name, rule, suffix, True)
 
         if rule.has("scope"):
             composer.line(f"log(False, debug2=f'Entering {rule_name} scope')")
@@ -770,9 +801,7 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
         if verbosity := rule.get("verbosity"):
             composer.line(f"pop_verb(True)")
 
-        if rule.has_directive("classify"):
-            with composer.if_stmt('not just_checking'):
-                composer.line(f'pop_classifier()')
+        compose_ruledef_classification(rule_name, rule, suffix, False)
 
         if rule.has_key:
             if rule.has("flip"):
@@ -1000,17 +1029,17 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
             stmt = "elif" if test_chained else "if"
 
         if isinstance(ref, TokenRef):
+            val = escape_token(ref.value)
             if cap_is_kind:
-                call = f"is_{snakefy(cap)}()"
+                call = f"is_{snakefy(cap)}(r'{val}')"
             else:
-                val = escape_token(ref.value)
                 call = f"is_token(r'{val}')"
 
         elif isinstance(ref, KindRef):
             if cap_is_kind:
                 source.index = ref.index
                 source.error(f"capture name for token reference {ref.value} cannot be ALL_CAPS")
-            call = f"is_{snakefy(ref.value)}()"
+            call = f"is_{snakefy(ref.value)}(value='')"
 
         elif isinstance(ref, RuleRef):
             if cap_is_kind:
@@ -1029,13 +1058,13 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
 
     elif action == "capture":
         if isinstance(ref, TokenRef):
+            val = escape_token(ref.value)
             if cap_is_kind:
                 kind = cap
                 cap = snakefy(cap)
-                mcall = f"match_{cap}({cap_class})"
-                call = mcall if is_optional else f"expect_{cap}({cap_class})"
+                mcall = f"match_{cap}(r'{val}', {cap_class})"
+                call = mcall if is_optional else f"expect_{cap}(r'{val}', {cap_class})"
             else:
-                val = escape_token(ref.value)
                 kind = "TOKEN"
                 mcall = f"match_token(r'{val}', {cap_class})"
                 call = mcall if is_optional else f"expect_token(r'{val}', {cap_class})"
@@ -1071,7 +1100,7 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
                 call = f"node_lookup({call}, '{lookup}', '{kind}')"
                 mcall = f"node_lookup({mcall}, '{lookup}', '{kind}')"
 
-            if has_cap:
+            if must_grab:
                 if ref.count is NC_ONE:
                     if must_append:
                         composer.line(f"append(node, '{cap}', {call})")
@@ -1080,11 +1109,11 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
                 elif ref.count is NC_ONE_OR_MORE:
                     composer.line(f"append(node, '{cap}', {call})")
                     composer.line_and_indent(f"while {cap} := {mcall}:")
-                    composer.line(f"append(node, '{cap}', cap)")
+                    composer.line(f"append(node, '{cap}', {cap})")
                     composer.dedent_only()
                 elif ref.count is NC_ZERO_OR_MORE:
                     composer.line_and_indent(f"while {cap} := {mcall}:")
-                    composer.line(f"append(node, '{cap}', cap)")
+                    composer.line(f"append(node, '{cap}', {cap})")
                     composer.dedent_only()
                 elif ref.count is NC_ZERO_OR_ONE:
                     if must_append:
