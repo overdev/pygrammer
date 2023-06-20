@@ -567,10 +567,11 @@ def parse_kind_definition(section_name: "str", section_spec: "str", grammar_node
 def parse_rule_attribute_or_directive(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
     """Parses a single rule attribute or directive"""
     re_word: "str" = r"\w+"
+    re_value: "str" = r"\w+(\.\w+)*"
     match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
 
     if grammar.match_regex(r":"):
-        match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
+        match_value = grammar.expect_regex(re_value, ERR_ATTRIB_VALUE)
 
         if not rule.add_attribute(match_key[0], match_value[0]):
             grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
