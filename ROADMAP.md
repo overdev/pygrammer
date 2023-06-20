@@ -14,9 +14,15 @@
     - [x] `@absfilepath` token decorator to check after matching if the value is a valid absolut file path string format
     - [x] `@reldirpath` token decorator to check after matching if the value is a valid relative directory path string format
     - [x] `@absdirpath` token decorator to check after matching if the value is a valid absolut directory path string format
-    - [ ] CANCELLED: `@mustexist` token decorator to use along `@relfilepath`, `@absfilepath`, `@reldirpath` and `@absdirpath` to ensure the file or directory exists
+    - [ ] **CANCELLED**: `@mustexist` token decorator to use along `@relfilepath`, `@absfilepath`, `@reldirpath` and `@absdirpath` to ensure the file or directory exists
     - [x] `@loadandparse` token decorator to take the value as a source file path, load its contents, parse it and return its AST
-    - [ ] Whatever relevant comes to mind in the process
+    - [ ] `.import .. .end` section to add import external functions to be called by the parser (to be used with the `transform:callable` attribute)
+    - [ ] `transport:callable` attribute to perfom any desired transformation on the node before returning it from the parsing function
+- [ ] **NOW IN v1.0.0** Tokenizer:
+    - [x] Generate a stream of tokens that can be used for syntax highlighting
+- [ ] Allow the parser to work also on strings.
+
+- [ ] Whatever relevant comes to mind in the process
 
 ### Revisions
 
@@ -35,8 +41,7 @@
 
 ## Plans for v1.1.x
 
-### Features
+### Revisions
 
 - [ ] Tokenizer:
-    - [ ] Generate a stream of tokens that can be used for syntax highlighting
     - [ ] Ensure the stream can be incrementally generated

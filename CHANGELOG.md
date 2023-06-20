@@ -31,6 +31,10 @@ Many improvements since beta1 but still there's a lot to be done. This beta2 pre
 - CLI argument `-verbosity` or `-v` to generated parser module do define initial log verbosity level (Defaults to `error`).
 - Implemented token directives `@relfilepath`, `@absfilepath`, `@reldirpath`, `@absdirpath`, `@ensurerelative`, `@ensureabsolute` and `@loadandparse`.
 - Mandatory `start` directive to select a default starting rule. CLI `--start` argument can override this value, but it is required for `@loadandparse`.
+- Tokenizer base implementation, which comes with the following:
+    - `classify` and `classify:dotted.value.name` directive and attribute to set the token classification.
+    - `reclassify:dotted.value.name` to reset current token classification.
+    - `retroclassify:dotted.value.name` to change the classification of previously collected tokens matching current classification, and following tokens.
 
 ## 0.1beta1 - 2023-06-05
 
