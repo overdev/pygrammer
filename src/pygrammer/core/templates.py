@@ -276,18 +276,64 @@ def flipped(node, item_key, key):
     log(False, debug2="No node to flip")
     return node
 
-def node_update(node, data):
-    \"""Updates the node with items in data""\"
+def merge(node, data, keep_kind = False):
+    \"""Updates the node with all items in data""\"
     if isinstance(node, dict):
         if data:
-            log(False, debug1=f"{node['kind']} becomes {data['kind']}")
-            log(False, debug2=f"Before update keys: {', '.join(node.keys())}")
+            log(False, debug1=f"{node['kind']} merges with {data['kind']}")
+            log(False, debug2=f"Before merge keys: {', '.join(node.keys())}")
             node.update(data)
-            log(False, debug2=f"After update keys: {', '.join(node.keys())}")
+            log(False, debug2=f"After merge keys: {', '.join(node.keys())}")
         else:
-            log(True, debug1="Fail to update node: data is None")
+            log(True, debug1="Fail to merge node: data is None")
     else:
-        source.warning("Fail to update node: node is None")
+        source.warning("Fail to merge node: node is None")
+
+def join(node, data):
+    \"""Updates the node only with items in data that node does not have""\"
+    if isinstance(node, dict):
+        if data:
+            log(False, debug1=f"{node['kind']} joins with {data['kind']}")
+            log(False, debug2=f"Before join keys: {', '.join(node.keys())}")
+            for key in data:
+                if key not in node:
+                    node[key] = data[key]
+            log(False, debug2=f"After join keys: {', '.join(node.keys())}")
+        else:
+            log(True, debug1="Fail to join node: data is None")
+    else:
+        source.warning("Fail to join node: node is None")
+
+def update(node, data, keep_kind = False):
+    \"""Updates the node only with items in data that node does have""\"
+    if isinstance(node, dict):
+        if data:
+            log(False, debug1=f"{node['kind']} joins with {data['kind']}")
+            log(False, debug2=f"Before join keys: {', '.join(node.keys())}")
+            for key in data:
+                if key in node:
+                    node[key] = data[key]
+            log(False, debug2=f"After join keys: {', '.join(node.keys())}")
+        else:
+            log(True, debug1="Fail to join node: data is None")
+    else:
+        source.warning("Fail to join node: node is None")
+
+def scope_lookup(name, must_find = False):
+    \"""Searches for the given name in the scope chain and returns its reference""\"
+    global scope_stack
+
+    ref = { 'ref_kind': 'NOT_FOUND', 'ref_name': name, 'inside_scope': None }
+
+    if len(scope_stack):
+        for scope in reversed(scope_stack):
+            if node := scope.get(name):
+                return { 'ref_kind': node['kind'], 'ref_name': name, 'inside_scope': scope['~[kind]~'] }
+
+    if must_find:
+        source.error(f"Name not found: '{name}'")
+
+    return ref
 
 def node_lookup(node, member, kind):
     \"""Extracts the member item from the node""\"
@@ -300,36 +346,51 @@ def node_lookup(node, member, kind):
 
 def push_verb(verbosity_level, do_log=False):
     global verbosity_stack, source
+
     if verbosity_level in VERB_LEVELS:
         if do_log:
             source.info(f"VERBOSITY: {source.verbosity.name.lower()} -> {verbosity_level}", False, False)
+
         verbosity_stack.append(source.verbosity)
         source.verbosity = VERB_LEVELS.get(verbosity_level)
 
 def pop_verb(do_log=False):
     global verbosity_stack, source
+
     if len(verbosity_stack):
         if do_log:
             source.info(f"VERBOSITY: {verbosity_stack[-1].name.lower()} <- {source.verbosity.name.lower()}", False, False)
+
         source.verbosity = verbosity_stack.pop()
 
-def push_scope(just_checking=False):
+def push_scope(just_checking=False, kind='scope'):
     \"""Adds namespace behavior to the current node""\"
     global scope_stack, scopes_enabled
+
     if not just_checking:
-        scope_stack.append({})
+        parent_scope = scope_stack[-1] if len(scope_stack) else None
+
+        scope = {
+            '~[kind]~': kind
+            '~[parent]~': parent_scope.get('~[kind]~')
+        }
+
+        scope_stack.append({ '$cope_kind': None })
 
 def pop_scope(node, name, just_checking=False):
     \"""Assigns the current scope to the onwer node""\"
     global scope_stack, scopes_enabled
+
     if not just_checking:
         if len(scope_stack):
             scope = scope_stack.pop()
+
             if isinstance(node, dict):
                 node[name] = scope
                 log(False, debug1=f"Scope assigned into node {node['kind']} under '{name}' key")
                 log(False, debug2=f"Scope has keys: {', '.join(scope.keys())}")
                 log(False, debug2=f"The {node['kind']} node has keys: {', '.join(node.keys())}")
+
             else:
                 source.warning("No node to assign scope into")
         else:
