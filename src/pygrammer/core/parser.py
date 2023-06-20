@@ -52,6 +52,7 @@ __all__ = [
     "DCR_BLOCKCOMMENT",
     "DCR_SKIP",
     "DCR_EXPAND",
+    "DCR_GRABTOKEN",
     "DCR_INTERNAL",
     'DCR_RELFILEPATH',
     'DCR_ABSFILEPATH',
@@ -136,6 +137,7 @@ DCR_SKIP = "skip"
 DCR_EXPAND = "expand"
 DCR_INTERNAL = "internal"
 DCR_GETTER = "getter"
+DCR_GRABTOKEN = "grabtoken"
 DCR_RELFILEPATH = "relfilepath"
 DCR_ABSFILEPATH = "absfilepath"
 DCR_RELDIRPATH = "reldirpath"
@@ -152,6 +154,7 @@ DECORATORS = [
     DCR_EXPAND,
     DCR_INTERNAL,
     DCR_GETTER,
+    DCR_GRABTOKEN,
     DCR_RELFILEPATH,
     DCR_ABSFILEPATH,
     DCR_RELDIRPATH,
@@ -561,46 +564,35 @@ def parse_kind_definition(section_name: "str", section_spec: "str", grammar_node
         grammar.info(f"Kind added: {kind_definition.name}", localized=False)
 
 
-def parse_rule_attributes(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
-    """Parses a rule attribute"""
+def parse_rule_attribute_or_directive(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
+    """Parses a single rule attribute or directive"""
     re_word: "str" = r"\w+"
-    attrib_key: "str" = ""
-    attrib_val: "str | bool"
+    re_value: "str" = r"\w+(\.\w+)*"
+    match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
+
+    if grammar.match_regex(r":"):
+        match_value = grammar.expect_regex(re_value, ERR_ATTRIB_VALUE)
+
+        if not rule.add_attribute(match_key[0], match_value[0]):
+            grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
+        elif verbosity >= INFO:
+            grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
+
+    else:
+        if not rule.add_directive(match_key[0]):
+            grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
+        elif verbosity >= INFO:
+            grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+
+def parse_rule_attributes(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
+    """Parses a set of rule attributes or directives"""
 
     if grammar.match_regex(RE_RULE_ATTRIB):
         grammar.expect_regex(r"\{")
-        match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
-
-        if grammar.match_regex(r":"):
-            match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
-
-            if not rule.add_attribute(match_key[0], match_value[0]):
-                grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
-            elif verbosity >= INFO:
-                grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
-
-        else:
-            if not rule.add_directive(match_key[0]):
-                grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
-            elif verbosity >= INFO:
-                grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+        parse_rule_attribute_or_directive(rule, verbosity)
 
         while grammar.match_regex(r","):
-            match_key = grammar.expect_regex(re_word, ERR_ATTRIB_KEY)
-
-            if grammar.match_regex(r":"):
-                match_value = grammar.expect_regex(re_word, ERR_ATTRIB_VALUE)
-
-                if not rule.add_attribute(match_key[0], match_value[0]):
-                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} attribute")
-                elif verbosity >= INFO:
-                    grammar.info(f"Rule attribute added: {match_key[0]}", localized=False)
-
-            else:
-                if not rule.add_directive(match_key[0]):
-                    grammar.warning(f"Rule {rule.name} already has {match_key[0]} directive")
-                elif verbosity >= INFO:
-                    grammar.info(f"Rule directive added: {match_key[0]}", localized=False)
+            parse_rule_attribute_or_directive(rule, verbosity)
 
         grammar.expect_regex(r"\}")
 
@@ -670,13 +662,13 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
         index = grammar.index
 
         if match_item := grammar.match_regex(RE_TOKEN_INSTANCE):
-            ref = TokenRef(match_item[2])
+            ref = TokenRef(match_item[2], source_index=index)
             refs.append(ref)
             continue
 
         if match_item := grammar.match_regex(RE_KIND_INSTANCE):
             cnt = COUNT_MAP.get(match_item[2], NC_ONE)
-            ref = KindRef(match_item[1], count=cnt)
+            ref = KindRef(match_item[1], count=cnt, source_index=index)
             refs.append(ref)
             continue
 
@@ -751,14 +743,14 @@ def parse_entry_capture(refs: "Sequence[GrammarNodeReference | NodeGroup]", node
             closed = True
             break
 
-        if capt_match := grammar.match_regex(r"(\*)?(\w+)(\.\w+)?"):
+        if capt_match := grammar.match_regex(r"(\*)?(\^)?(\w+)(\.\w+)?"):
             captures.append(capt_match[0])
             capt_sequence = capt_match[1]
 
-            if capt_match[3]:
-                capture = f"{capt_match[2]}.{capt_match[3]}"
+            if capt_match[4]:
+                capture = f"{capt_match[3]}.{capt_match[4]}"
             else:
-                capture = capt_match[2]
+                capture = capt_match[3]
 
             if capt_sequence:
                 node[capture] = []
