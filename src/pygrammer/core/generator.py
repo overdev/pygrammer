@@ -994,6 +994,9 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
     is_optional: "bool" = ref.count in (NC_ZERO_OR_ONE, NC_ZERO_OR_MORE)
     cap = kwargs.get("use_capture", ref.capture).lstrip("*")
     should_merge_rule: "bool" = False
+    should_join_rule: "bool" = False
+    should_update_rule: "bool" = False
+    keepkind: "bool" = False
     has_lookup: "bool" = False
 
     must_grab = '^' not in cap and cap != '_'
@@ -1085,7 +1088,10 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
             if rule is None:
                 source.index = ref.index
                 source.error(f"Rule not found: {ref.value}")
+            keepkind = rule.has_directive("keepkind")
             should_merge_rule = rule.has_directive("merge")
+            should_join_rule = rule.has_directive("join") and not should_merge_rule
+            should_update_rule = rule.has_directive("update") and not should_merge_rule and not should_join_rule
 
             kind = snakefy(ref.value).upper()
             mcall = f"match_{snakefy(ref.value)}()"
@@ -1094,7 +1100,15 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
         if should_merge_rule:
             if ref.count not in (NC_ONE, NC_ZERO_OR_ONE):
                 source.error(f"{ref.value} rule must have at most one ocurrence ({ref.count.name}).")
-            composer.line(f"node_update(node, {mcall})")
+            composer.line(f"merge(node, {mcall}, keep_kind={keep_kind})")
+        elif should_join_rule:
+            if ref.count not in (NC_ONE, NC_ZERO_OR_ONE):
+                source.error(f"{ref.value} rule must have at most one ocurrence ({ref.count.name}).")
+            composer.line(f"join(node, {mcall})")
+        elif should_update_rule:
+            if ref.count not in (NC_ONE, NC_ZERO_OR_ONE):
+                source.error(f"{ref.value} rule must have at most one ocurrence ({ref.count.name}).")
+            composer.line(f"update(node, {mcall}, keep_kind={keep_kind})")
         else:
             if has_lookup:
                 call = f"node_lookup({call}, '{lookup}', '{kind}')"
