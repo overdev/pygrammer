@@ -128,6 +128,7 @@ abstract_syntax_tree = {}
 token_classifiers = []
 # Token stream
 token_stream = []
+is_tokenizing = False
 """
 
 TPL_CONSTANTS = """
@@ -209,7 +210,7 @@ def match_token(*regexes, token_classifier='any'):
         if m := source.match_regex(regex):
             log(False, debug3=f"Matched token with regex ```{ regex }``` at line {location[1]}, {location[2]}: '{m[0]}'")
             token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
-            grab_token(token)
+            grab_token(token, location)
             return token
     return None
 
@@ -220,7 +221,7 @@ def expect_token(*regexes, token_classifier='any'):
     for regex in regexes:
         if m := source.expect_regex(regex):
             token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
-            grab_token(token)
+            grab_token(token, location)
             return token
     return None
 
@@ -389,7 +390,42 @@ def pop_classifier():
     global token_classifiers
     token_classifiers.pop()
 
+def unload_classifiers():
+    \"""Pops all token classifiers""\"
+    global token_classifiers
+    clfrs = token_classifiers[:]
+    token_classifiers.clear()
+    return clfrs
+
+def load_classifiers(clfrs, clear_first = True):
+    \"""Pushes a sequence of token classifiers""\"
+    global token_classifiers
+    if clear_first:
+        token_classifiers.clear()
+    token_classifiers.extend(clfrs)
+
+def retroclassify(new_clfr):
+    global token_stream, token_classifiers
+
+    curr_clfr = '.'.join(token_classifiers)
+    i = len(token_stream) -1
+
+    while i >= 0:
+        tkn_clfr = token_stream[i].get('classifier')
+
+        if tkn_clfr.startswith(curr_clfr):
+            token_stream[i]['classifier'] = token_stream[i]['classifier'].replace(curr_clfr, new_clfr)
+
+        else:
+            break
+        i -= 1
+
+    token_classifiers.clear()
+    token_classifiers.extend(new_clfr.split('.'))
+
+
 def classify(token_kind):
+    \"""Returns the fully qualified token classification""\"
     global token_classifiers
     clfr = '.'.join(token_classifiers)
     if clfr and token_kind:
@@ -401,10 +437,13 @@ def classify(token_kind):
     else:
         return "other"
 
-def grab_token(token):
+def grab_token(token, location):
     global token_stream
-    token_stream.append(token)
 
+    fname, lin, col, index, line = location
+    length = len(token.get('value', ''))
+    tkn = { 'start_index': index, 'end_index': index + length, 'length': length, 'line': lin, 'column': col, 'classifier': token.get('classifier', '<unknown>') }
+    token_stream.append(tkn)
 """
 
 
@@ -513,6 +552,24 @@ def parse(source_fname, start_rule='{start_rule}', verbosity='error'):
         header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
         print(header)
 
+def generate_ast(source_fname, start_rule='{start_rule}', verbosity='error'):
+    \"""Parses the source file and returns its AST""\"
+    global abstract_syntax_tree
+    parse(source_fname, start_rule, verbosity)
+
+    return abstract_syntax_tree
+
+def generate_stream(source_fname, start_rule='{start_rule}', verbosity='error'):
+    \"""Parses the source file and returns its stream of tokens""\"
+    global token_stream, is_tokenizing
+
+    is_tokenizing = True
+    try:
+        parse(source_fname, start_rule, verbosity)
+    except GrammarTokenizerStop:
+        pass
+
+    return token_stream
 """
 
 TPL_MAIN = """just_fix_windows_console()
@@ -572,6 +629,10 @@ class GrammarParserError(Exception):
     pass
 
 
+class GrammarTokenizerStop(Exception):
+    pass
+
+
 @dataclass
 class Source:
     contents: str
@@ -580,7 +641,7 @@ class Source:
     verbosity: Verbosity = ERROR
 
     @property
-    def location(self) -> 'tuple[str, int, int, str]':
+    def location(self) -> 'tuple[str, int, int, int, str]':
         ""\"Returns a 4-tuple containing the filename, line number, column, and line of code\"""
         consumed = len(self.contents) - len(self.current)
         consumed_lines = self.contents[0: consumed].split('\\n')
@@ -589,7 +650,7 @@ class Source:
         remaining_line = self.current.split('\\n')[0]
         line = f"  {consumed_lines[-1]}{remaining_line}"
 
-        return self.filename, line_num, col_num, line
+        return self.filename, line_num, col_num, consumed, line
 
     @property
     def index(self) -> 'int':
@@ -638,10 +699,11 @@ TPL_SOURCE_CLASS_2 = """
 
     def _log(self, severity: str, message: str, localized: bool = True, at_index: int | None = None, color='WHITE', sys_exit: bool = False, raise_exc: bool = False, out_file: io.IOBase = sys.stdout) -> 'None':
         ""\"Prints an log message.""\"
+        global is_tokenizing
         saved_index = self.index
         if isinstance(at_index, int):
             self.index = at_index
-        file, lin, col, line = self.location
+        file, lin, col, index, line = self.location
         self.index = saved_index
 
         header = f"{Fore.BLACK}{getattr(Back, color, Back.WHITE)}{severity}: {Style.BRIGHT}{getattr(Fore, color, Fore.WHITE)}{Back.BLACK} {message}{Style.RESET_ALL}"
@@ -649,7 +711,7 @@ TPL_SOURCE_CLASS_2 = """
         pointer = f"  {' ' * (col - 1)}{getattr(Fore, color, Fore.WHITE)}^{Style.RESET_ALL}"
 
         if raise_exc:
-            raise GrammarParserError(message)
+                raise GrammarParserError(message)
         else:
             if localized:
                 print(f"{header}\\n{location}\\n{line}\\n{pointer}", file=out_file)
@@ -657,13 +719,16 @@ TPL_SOURCE_CLASS_2 = """
                 print(header, file=out_file)
             
             if sys_exit:
-                sys.exit(1)
+                if is_tokenizing:
+                    raise GrammarTokenizerStop(message)
+                else:
+                    sys.exit(1)
 
     def error(self, message: str, at: int | None = None) -> 'None':
         ""\"Aborts with an error message.\"""
         self._log('ERROR', message, at_index=at, color='RED', sys_exit=True, out_file=sys.stderr)
 
-    def warning(self, message: str) -> 'None':
+    def warning(self, message: str, at: int | None = None) -> 'None':
         ""\"Aborts with an error message.""\"
         self._log('WARNING', message, at_index=at, color='YELLOW')
 
