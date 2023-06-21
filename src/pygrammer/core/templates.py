@@ -118,10 +118,9 @@ source = None
 
 # stack of namespaces to use with push_scope(), pop_scope() and declare()
 scope_stack = []
+scope_ids = {}
 # verbosity level to use with push_verb(), pop_verb()
 verbosity_stack = []
-# helps to avoid pushing/popping scopes when testing rules
-scopes_enabled = True
 # The final AST: keys should be absolute filenames, values should be module nodes
 abstract_syntax_tree = {}
 # Token clasification
@@ -260,6 +259,14 @@ def reduced(node, key):
             log(False, debug1=f"{node['kind']} not reduced")
     return node
 
+def deflate(node):
+    \"""Tries to reduce the node to its key""\"
+    if isinstance(node, dict):
+        for key in list(node.keys()):
+            if node[key] == None:
+                del node[key]
+
+
 def flipped(node, item_key, key):
     ""\"Tries to set the item as paret to the node\"""
     if isinstance(node, dict):
@@ -280,7 +287,7 @@ def merge(node, data, keep_kind = False):
     \"""Updates the node with all items in data""\"
     if isinstance(node, dict):
         if data:
-            log(False, debug1=f"{node['kind']} merges with {data['kind']}")
+            log(False, debug1=f"{node['kind']} merges with {data.get('kind', 'ANY_KIND')}")
             log(False, debug2=f"Before merge keys: {', '.join(node.keys())}")
             node.update(data)
             log(False, debug2=f"After merge keys: {', '.join(node.keys())}")
@@ -293,7 +300,7 @@ def join(node, data):
     \"""Updates the node only with items in data that node does not have""\"
     if isinstance(node, dict):
         if data:
-            log(False, debug1=f"{node['kind']} joins with {data['kind']}")
+            log(False, debug1=f"{node['kind']} joins with {data.get('kind', 'ANY_KIND')}")
             log(False, debug2=f"Before join keys: {', '.join(node.keys())}")
             for key in data:
                 if key not in node:
@@ -308,7 +315,7 @@ def update(node, data, keep_kind = False):
     \"""Updates the node only with items in data that node does have""\"
     if isinstance(node, dict):
         if data:
-            log(False, debug1=f"{node['kind']} joins with {data['kind']}")
+            log(False, debug1=f"{node['kind']} joins with {data.get('kind', 'ANY_KIND')}")
             log(False, debug2=f"Before join keys: {', '.join(node.keys())}")
             for key in data:
                 if key in node:
@@ -319,19 +326,22 @@ def update(node, data, keep_kind = False):
     else:
         source.warning("Fail to join node: node is None")
 
-def scope_lookup(name, must_find = False):
+def scope_lookup(name, must_find):
     \"""Searches for the given name in the scope chain and returns its reference""\"
     global scope_stack
 
-    ref = { 'ref_kind': 'NOT_FOUND', 'ref_name': name, 'inside_scope': None }
+    if not isinstance(name, str):
+        source.error(f"Lookup name must be a string, not {clsn(name)}")
+
+    ref = { 'ref_kind': 'NOT_FOUND', 'ref_name': name, 'ref_scope': None }
 
     if len(scope_stack):
         for scope in reversed(scope_stack):
             if node := scope.get(name):
-                return { 'ref_kind': node['kind'], 'ref_name': name, 'inside_scope': scope['~[kind]~'] }
+                return { 'ref_kind': node['kind'], 'ref_name': name, 'ref_scope': scope.get('~[kind]~') }
 
     if must_find:
-        source.error(f"Name not found: '{name}'")
+        source.error(f"Lookup name not found: '{name}'")
 
     return ref
 
@@ -365,21 +375,26 @@ def pop_verb(do_log=False):
 
 def push_scope(just_checking=False, kind='scope'):
     \"""Adds namespace behavior to the current node""\"
-    global scope_stack, scopes_enabled
+    global scope_stack, scope_ids
 
     if not just_checking:
         parent_scope = scope_stack[-1] if len(scope_stack) else None
 
+        if kind not in scope_ids:
+            scope_ids[kind] = 0
+        scope_id = f"{kind}:{scope_ids[kind]:06X}"
+        scope_ids[kind] += 1
+
         scope = {
-            '~[kind]~': kind
-            '~[parent]~': parent_scope.get('~[kind]~')
+            '~[kind]~': scope_id,
+            '~[parent]~': parent_scope.get('~[kind]~') if parent_scope else None
         }
 
-        scope_stack.append({ '$cope_kind': None })
+        scope_stack.append(scope)
 
 def pop_scope(node, name, just_checking=False):
     \"""Assigns the current scope to the onwer node""\"
-    global scope_stack, scopes_enabled
+    global scope_stack
 
     if not just_checking:
         if len(scope_stack):
@@ -410,8 +425,8 @@ def append(node, key, value):
 
 def declare(identifier_key, node, kind):
     \"""Declares a node in the current scope""\"
-    global scope_stack, scopes_enabled
-    # if scopes_enabled:
+    global scope_stack
+
     if len(scope_stack):
         scope = scope_stack[-1]
 
