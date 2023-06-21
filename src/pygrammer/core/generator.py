@@ -766,9 +766,10 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
         composer.line(f"return match_{suffix}(True)")
 
     with composer.func_def(f"match_{suffix}", ['just_checking = False'], docstring):
+        composer.line("index = source.index")
         if verbosity := rule.get("verbosity"):
             composer.line(f"push_verb('{verbosity}', True)")
-        composer.line(f"log(False, debug1=f'Testing {rule_name}:' if just_checking else f'Matching {rule_name}:')")
+        composer.line(f"log(False, debug3=f'Testing {rule_name}:' if just_checking else f'Matching {rule_name}:')")
 
         composer.line(f"node = {{ 'kind': '{node_kind}' }}")
 
@@ -776,7 +777,7 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         if rule.has("scope"):
             composer.line(f"log(False, debug2=f'Entering {rule_name} scope')")
-            composer.line(f"push_scope(just_checking)")
+            composer.line(f"push_scope(just_checking, '{suffix.upper()}')")
 
         for i, entry in enumerate(rule.entries):
             # check_entry(entry)
@@ -794,6 +795,22 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
             composer.line(f"log(False, debug2=f'Leaving {rule_name} scope')")
             composer.line(f"pop_scope(node, '{scope_val}', just_checking)")
 
+        if name_key := rule.get("lookup"):
+            with composer.if_stmt("node"):
+                composer.line(f"lookup_name = node.get('{name_key}')")
+                composer.line(f"ref = scope_lookup(lookup_name, True)")
+                composer.line(f"log(True, debug1=f\"ref lookup for {name_key} is {{ref}}\")")
+                composer.line(f"merge(node, ref, keep_kind=True)")
+                composer.line(f"print(f\"ref lookup for {name_key} is {{ref}}\")")
+
+        elif name_key := rule.get("find"):
+            with composer.if_stmt("node"):
+                composer.line(f"lookup_name = node.get('{name_key}')")
+                composer.line(f"ref = scope_lookup(lookup_name, False)")
+                composer.line(f"log(True, debug1=f\"ref search for {name_key} is {{ref}}\")")
+                composer.line(f"merge(node, ref, keep_kind=True)")
+                composer.line(f"print(f\"ref search for {name_key} is {{ref}}\")")
+
         if identifier := rule.get("declare"):
             with composer.if_stmt("node"):
                 composer.line(f"declare('{identifier}', node, '{node_kind}')")
@@ -802,6 +819,11 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
             composer.line(f"pop_verb(True)")
 
         compose_ruledef_classification(rule_name, rule, suffix, False)
+
+        if rule.has_directive("deflate"):
+            composer.line("deflate(node)")
+        # else:
+            # print("RULE", suffix, "does not have deflate")
 
         if rule.has_key:
             if rule.has("flip"):
@@ -996,7 +1018,7 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
     should_merge_rule: "bool" = False
     should_join_rule: "bool" = False
     should_update_rule: "bool" = False
-    keepkind: "bool" = False
+    keep_kind: "bool" = False
     has_lookup: "bool" = False
 
     must_grab = '^' not in cap and cap != '_'
