@@ -128,6 +128,8 @@ ERR_ATTRIB_VALUE = "Expected rule attribute value"
 
 SECTION_TOKEN = "token"
 SECTION_RULE = "rules"
+SECTION_IMPORT = "imports"
+SECTION_COLLECTION = "collection"
 SECTION_END = r"\.end"
 
 DCR_WHITESPACE = "whitespace"
@@ -206,6 +208,7 @@ class GrammarNodes:
     output_filename: str
     tokens: "dict[str, TokenDef]" = field(default_factory=dict)
     kinds: "dict[str, KindDef]" = field(default_factory=dict)
+    collections: "dict[str, CollectionDef]" = field(default_factory=dict)
     rules: "dict[str, RuleDef]" = field(default_factory=dict)
     node_names: "list[str]" = field(default_factory=list)
     start_rule: 'RuleDef | None' = None
@@ -225,6 +228,10 @@ class GrammarNodes:
 
         elif isinstance(node, KindDef):
             self.kinds[node.name] = node
+            return True
+
+        elif isinstance(node, CollectionDef):
+            self.collections[node.name] = node
             return True
 
         elif isinstance(node, RuleDef):
@@ -426,6 +433,7 @@ def parse_grammar(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR)
 
 def parse_section(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR) -> "bool":
     """Parses a grammar section"""
+    index = grammar.index
     m: "Match" = grammar.expect_regex(RE_SECTION, ERR_SECTION)
 
     section_name: "str" = m[1]
@@ -435,17 +443,20 @@ def parse_section(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR)
 
     if section_name == SECTION_TOKEN:
         if verbosity >= DEBUG1:
-            grammar.info(
-                f"Section: {section_name} ({section_spec})",
-                localized=False,
-                as_debug=True,
-            )
+            grammar.info(f"Section: {section_name} ({section_spec})", localized=False, as_debug=True)
 
         if section_name == section_spec:
             parse_token_definitions(section_name, grammar_nodes, verbosity)
             grammar.expect_regex(SECTION_END, "Expected section end")
         else:
             parse_kind_definition(section_name, section_spec, grammar_nodes, verbosity)
+        return True
+
+    if section_name == SECTION_COLLECTION:
+        if verbosity >= DEBUG1:
+            grammar.info(f"Section: {section_name} ({section_spec})", localized=False, as_debug=True)
+
+        add_collection_definition(section_name, section_spec, grammar_nodes, index, verbosity)
         return True
 
     if section_name == SECTION_RULE:
@@ -562,6 +573,17 @@ def parse_kind_definition(section_name: "str", section_spec: "str", grammar_node
 
     if verbosity >= DEBUG1:
         grammar.info(f"Kind added: {kind_definition.name}", localized=False)
+
+
+def add_collection_definition(section_name: "str", section_spec: "str", grammar_nodes: "GrammarNodes", index: int, verbosity: "Verbosity" = ERROR):
+    collection_definition: "CollectionDef" = CollectionDef(section_spec, index)
+
+    if grammar_nodes.has_node(collection_definition):
+        grammar.error(ERR_DEFINITION)
+    grammar_nodes.add(collection_definition)
+
+    if verbosity >= DEBUG1:
+        grammar.info(f"Collection added: {collection_definition.name}", localized=False)
 
 
 def parse_rule_attribute_or_directive(rule: "RuleDef", verbosity: "Verbosity" = ERROR):
