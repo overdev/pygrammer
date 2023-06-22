@@ -128,6 +128,9 @@ token_classifiers = []
 # Token stream
 token_stream = []
 is_tokenizing = False
+
+# **COLL** #
+
 """
 
 TPL_CONSTANTS = """
@@ -333,12 +336,12 @@ def scope_lookup(name, must_find):
     if not isinstance(name, str):
         source.error(f"Lookup name must be a string, not {clsn(name)}")
 
-    ref = { 'ref_kind': 'NOT_FOUND', 'ref_name': name, 'ref_scope': None }
+    ref = { 'kind': 'REF_NAME', 'ref_kind': 'NOT_FOUND', 'ref_name': name, 'ref_scope': None }
 
     if len(scope_stack):
         for scope in reversed(scope_stack):
             if node := scope.get(name):
-                return { 'ref_kind': node['kind'], 'ref_name': name, 'ref_scope': scope.get('~[kind]~') }
+                return { 'kind': f"{node['kind']}_REFERENCE", 'ref_kind': node['kind'], 'ref_name': name, 'ref_scope': scope.get('~[kind]~') }
 
     if must_find:
         source.error(f"Lookup name not found: '{name}'")
@@ -422,6 +425,7 @@ def append(node, key, value):
             log(True, warning=f"Cannot append to {key} in {node['kind']} node: not a list")
     else:
         log(True, warning=f"No node with '{key}' to append value into")
+
 
 def declare(identifier_key, node, kind):
     \"""Declares a node in the current scope""\"
