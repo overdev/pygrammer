@@ -51,11 +51,13 @@ __all__ = [
     'GrammarNodeDefinition',
     'TokenDef',
     'KindDef',
+    'CollectionDef',
     'RuleDef',
     'NodeGroup',
     'GrammarNodeReference',
     'TokenRef',
     'KindRef',
+    'CollectionRef',
     'RuleRef',
 ]
 
@@ -182,6 +184,13 @@ class KindDef(GrammarNodeDefinition):
         return self._is_group
 
 
+class CollectionDef(GrammarNodeDefinition):
+    """Represents a Collection definition"""
+
+    def __init__(self, name: 'str', source_index: 'int'):
+        super().__init__(name)
+
+
 class RuleDef(GrammarNodeDefinition):
     """Represents a Rule definition"""
 
@@ -246,6 +255,20 @@ class RuleDef(GrammarNodeDefinition):
     def has(self, attr: 'str') -> 'bool':
         """Returns whether the rule has the specified attribute `attr`"""
         return attr in self.attributes
+
+    def has_any(self, *attrs: 'str') -> 'bool':
+        """Returns whether the rule has the specified attribute `attr`"""
+        for attr in attrs:
+            if attr in self.attributes:
+                return True
+        return False
+
+    def has_any_directive(self, *directives: 'str') -> 'bool':
+        """Returns whether the rule has the specified attribute `attr`"""
+        for directive in directives:
+            if directive in self.directives:
+                return True
+        return False
 
     def has_directive(self, directive: 'str') -> 'bool':
         """Returns whether the rule has the specified directive"""
@@ -394,6 +417,13 @@ class KindRef(GrammarNodeReference):
 
     def __init__(self, kind_name: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
         super().__init__(kind_name, count, source_index)
+
+
+class CollectionRef(GrammarNodeReference):
+    """Represents a reference to a Token Collection definition"""
+
+    def __init__(self, collection_name: 'str', count: 'NodeCount' = NC_ONE, source_index: 'int' = 0):
+        super().__init__(collection_name, count, source_index)
 
 
 class RuleRef(GrammarNodeReference):
