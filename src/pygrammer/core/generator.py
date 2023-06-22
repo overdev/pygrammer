@@ -60,6 +60,7 @@ source: "Source" = None
 
 gen_templates: dict[str, str] = {
     're_consts': '',
+    'token_collections': ''
 }
 
 start_rule: str = ''
@@ -73,6 +74,9 @@ NEWLINE = "\n"
 INDENT = "    "
 
 RE_CONSTANTS = 're_consts'
+COLLECTIONS = 'token_collections'
+
+FS_DECORATORS = (DCR_RELFILEPATH, DCR_ABSFILEPATH, DCR_RELDIRPATH, DCR_ABSDIRPATH, DCR_ENSURERELATIVE, DCR_ENSUREABSOLUTE, DCR_LOADANDPARSE)
 
 # endregion (constants)
 # ---------------------------------------------------------
@@ -514,6 +518,7 @@ def compose_parser():
 
             compose_token_definitions()
             compose_kind_definitions()
+            compose_collection_definitions()
             compose_rule_definitions()
 
         with composer.func_def("main", [], "Parser's CLI entry point.", empty_before=3, empty_after=1):
@@ -527,6 +532,7 @@ def compose_parser():
 
         composer.empty()
 
+    composer.replace("# **COLL** #", gen_templates[COLLECTIONS])
     composer.replace("# **RE** #", gen_templates[RE_CONSTANTS])
 
 # region GRAMMAR NODES
@@ -550,6 +556,13 @@ def compose_kind_definitions():
             compose_kinddef(name, kinddef)
 
 
+def compose_collection_definitions():
+    """Composes all token group definitions"""
+    with composer.region("collection definitions"):
+        for name, collectiondef in grammar.collections.items():
+            compose_collectiondef(name, collectiondef)
+
+
 def compose_rule_definitions():
     """Composes all rule definitions"""
     global start_rule
@@ -563,12 +576,84 @@ def compose_rule_definitions():
 
     if entry_rule is None:
         source.error(f"No starting rule: Please, apply the {Fore.MAGENTA}start{Fore.RED} directive to a rule of your choosing.")
+
     elif source.verbosity >= INFO:
         source.info(f"Starting rule: {Fore.MAGENTA}{entry_rule.name}", localized=False)
     start_rule = entry_rule.name
 
 
-def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
+def compose_def_body_exclusions(definition: "TokenDef | KindDef", suffix: "str", const_name: "str", match_index: "int", excludes: "list[str] | None"):
+    for exclusion in excludes:
+        if kind := grammar.kinds.get(exclusion):
+            value = '|'.join(kind.values)
+            with composer.if_stmt(f"m_{snakefy(exclusion)} := RE_{exclusion}.fullmatch(m_{suffix}[{match_index}])"):
+                with composer.if_stmt(f"not advance"):
+                    composer.line(f"return False")
+                composer.line(f"log(True, error='Expected {const_name}, got {exclusion}')")
+        else:
+            source.error(f"{const_name} exclusion '{exclusion}' is not defined")
+
+
+def compose_def_body_decorators(definition: "TokenDef | KindDef", suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
+    composer.line(f"m_path: str = m_{suffix}[{match_index}]")
+    composer.line(f"m_path_valid: bool = True")
+    composer.line(f"m_path_error: bool = False")
+    composer.line(f"m_path_message: str = ''")
+    composer.line(f"submodule: 'dict | None' = None")
+    path_kind = "'PATH'"
+
+    if definition.has_decorator(DCR_RELFILEPATH):
+        composer.template(TPL_RELFILEPATH)
+        path_kind = "'FILE_PATH_RELATIVE'"
+
+    if definition.has_decorator(DCR_ABSFILEPATH):
+        composer.template(TPL_ABSFILEPATH)
+        path_kind = "'FILE_PATH_ABSOLUTE'"
+
+    if definition.has_decorator(DCR_RELDIRPATH):
+        composer.template(TPL_RELDIRPATH)
+        path_kind = "'DIRECTORY_PATH_RELATIVE'"
+
+    if definition.has_decorator(DCR_ABSDIRPATH):
+        composer.template(TPL_ABSDIRPATH)
+        path_kind = "'DIRECTORY_PATH_ABSOLUTE'"
+
+    if definition.has_decorator(DCR_ENSURERELATIVE):
+        composer.template(TPL_ENSURERELATIVE)
+        path_kind = path_kind.replace('ABSOLUTE', 'RELATIVE')
+
+    if definition.has_decorator(DCR_ENSUREABSOLUTE):
+        composer.template(TPL_ENSUREABSOLUTE)
+        path_kind = path_kind.replace('RELATIVE', 'ABSOLUTE')
+
+    with composer.if_stmt("not m_path_valid"):
+        with composer.if_stmt("advance"):
+            with composer.if_stmt("m_path_error"):
+                composer.line("log(True, error=m_path_message)")
+            with composer.else_stmt():
+                composer.line("log(True, warning=m_path_message)")
+        with composer.else_stmt():
+                composer.line("return False")
+
+    with composer.else_stmt():
+        if definition.has_decorator(DCR_LOADANDPARSE):
+            with composer.if_stmt("advance"):
+                composer.line(f"source.expect_regex(RE_{const_name}, advance)")
+                composer.template(TPL_LOADANDPARSE)
+            composer.line(f"token = {{ 'kind': 'SUBMODULE', 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
+            composer.line(f"grab_token(token, location)")
+            composer.line(f"return token")
+        else:
+            with composer.if_stmt("advance"):
+                composer.line(f"source.expect_regex(RE_{const_name}, advance)")
+                composer.line(f"token {{ 'kind': {path_kind}, 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
+                composer.line(f"grab_token(token, location)")
+                composer.line(f"return token")
+            with composer.else_stmt():
+                composer.line("return True")
+
+
+def compose_def_body(definition: "TokenDef | KindDef | CollectionDef", suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
     """Composes the functions for parsing tokens"""
     with composer.func_def(f"is_{suffix}", ["value=''"], docstring):
         composer.line("location = source.location")
@@ -576,88 +661,33 @@ def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring:
             composer.line(f"return True")
         composer.line(f"return False")
 
+    pattern = f"RE_{const_name}"
+    the_match = f"m_{suffix}"
+    collection = f"{suffix}_collection"
     with composer.func_def(f"match_{suffix}", ["value=''", "advance=True", f"token_classifier='{suffix}'"], docstring):
         composer.line("location = source.location")
 
-        with composer.if_stmt(f"m_{suffix} := source.match_regex(RE_{const_name}, False)"):
+        if isinstance(definition, CollectionDef):
+            with composer.if_stmt(f"len({collection}) == 0"):
+                composer.line(f"return None if advance else False")
+
+        with composer.if_stmt(f"{the_match} := source.match_regex({pattern}, False)"):
             if excludes:
-                for exclusion in excludes:
-                    if kind := grammar.kinds.get(exclusion):
-                        value = '|'.join(kind.values)
-                        with composer.if_stmt(f"m_{snakefy(exclusion)} := RE_{exclusion}.fullmatch(m_{suffix}[{match_index}])"):
-                            with composer.if_stmt(f"not advance"):
-                                composer.line(f"return False")
-                            composer.line(f"log(True, error='Expected {const_name}, got {exclusion}')")
-                    else:
-                        source.error(f"{const_name} exclusion '{exclusion}' is not defined")
+                compose_def_body_exclusions(definition, suffix, const_name, match_index, excludes)
 
-            if isinstance(definition, TokenDef) and definition.has_any_decorator(DCR_RELFILEPATH, DCR_ABSFILEPATH, DCR_RELDIRPATH, DCR_ABSDIRPATH, DCR_ENSURERELATIVE, DCR_ENSUREABSOLUTE, DCR_LOADANDPARSE):
-                composer.line(f"m_path: str = m_{suffix}[{match_index}]")
-                composer.line(f"m_path_valid: bool = True")
-                composer.line(f"m_path_error: bool = False")
-                composer.line(f"m_path_message: str = ''")
-                composer.line(f"submodule: 'dict | None' = None")
-                path_kind = "'PATH'"
-
-                if definition.has_decorator(DCR_RELFILEPATH):
-                    composer.template(TPL_RELFILEPATH)
-                    path_kind = "'FILE_PATH_RELATIVE'"
-
-                if definition.has_decorator(DCR_ABSFILEPATH):
-                    composer.template(TPL_ABSFILEPATH)
-                    path_kind = "'FILE_PATH_ABSOLUTE'"
-
-                if definition.has_decorator(DCR_RELDIRPATH):
-                    composer.template(TPL_RELDIRPATH)
-                    path_kind = "'DIRECTORY_PATH_RELATIVE'"
-
-                if definition.has_decorator(DCR_ABSDIRPATH):
-                    composer.template(TPL_ABSDIRPATH)
-                    path_kind = "'DIRECTORY_PATH_ABSOLUTE'"
-
-                if definition.has_decorator(DCR_ENSURERELATIVE):
-                    composer.template(TPL_ENSURERELATIVE)
-                    path_kind = path_kind.replace('ABSOLUTE', 'RELATIVE')
-
-                if definition.has_decorator(DCR_ENSUREABSOLUTE):
-                    composer.template(TPL_ENSUREABSOLUTE)
-                    path_kind = path_kind.replace('RELATIVE', 'ABSOLUTE')
-
-                with composer.if_stmt("not m_path_valid"):
-                    with composer.if_stmt("advance"):
-                        with composer.if_stmt("m_path_error"):
-                            composer.line("log(True, error=m_path_message)")
-                        with composer.else_stmt():
-                            composer.line("log(True, warning=m_path_message)")
-                    with composer.else_stmt():
-                            composer.line("return False")
-
-                with composer.else_stmt():
-                    if definition.has_decorator(DCR_LOADANDPARSE):
-                        with composer.if_stmt("advance"):
-                            composer.line(f"source.expect_regex(RE_{const_name}, advance)")
-                            composer.template(TPL_LOADANDPARSE)
-                        composer.line(f"token = {{ 'kind': 'SUBMODULE', 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
-                        composer.line(f"grab_token(token, location)")
-                        composer.line(f"return token")
-                    else:
-                        with composer.if_stmt("advance"):
-                            composer.line(f"source.expect_regex(RE_{const_name}, advance)")
-                            composer.line(f"token {{ 'kind': {path_kind}, 'path': os.path.abspath(os.path.normpath(m_path)), 'valid': m_path_valid, 'exists': os.path.exists(m_path), 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
-                            composer.line(f"grab_token(token, location)")
-                            composer.line(f"return token")
-                        with composer.else_stmt():
-                            composer.line("return True")
+            if isinstance(definition, TokenDef) and definition.has_any_decorator(*FS_DECORATORS):
+                compose_def_body_decorators(definition, suffix, docstring, const_name, regex_str, match_index, excludes)
             else:
-                with composer.if_stmt(f"value and not re.fullmatch(value, m_{suffix}[{match_index}])"):
+                with composer.if_stmt(f"value and not re.fullmatch(value, {the_match}[{match_index}])"):
                     composer.line(f"return None if advance else False")
 
                 with composer.if_stmt("advance"):
-                    composer.line(f"m = source.expect_regex(RE_{const_name}, advance)")
-                    composer.line(f"log(False, debug3=f\"\"\"Matched token RE_{const_name} at line {{location[1]}}, {{location[2]}}: '{{m[{match_index}]}}'\"\"\")")
-                    composer.line(f"token = {{ 'kind': '{const_name}', 'value': m_{suffix}[{match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
+                    composer.line(f"m = source.expect_regex({pattern}, advance)")
+                    composer.line(f"log(False, debug3=f\"\"\"Matched token {pattern} at line {{location[1]}}, {{location[2]}}: '{{m[{match_index}]}}'\"\"\")")
+                    composer.line(f"token = {{ 'kind': '{const_name}', 'value': {the_match}[{match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
                     composer.line(f"grab_token(token, location)")
                     composer.line(f"return token")
+
                 with composer.else_stmt():
                     composer.line(f"return True")
 
@@ -665,14 +695,22 @@ def compose_def_body(definition: "TokenDef | KindDef", suffix: "str", docstring:
 
     with composer.func_def(f"expect_{suffix}", ["value=''", f"token_classifier='{suffix}'"], docstring):
         composer.line("index = source.index")
-        with composer.if_stmt(f"m_{suffix} := match_{suffix}(value, token_classifier=token_classifier)"):
-            composer.line(f"return m_{suffix}")
+        with composer.if_stmt(f"{the_match} := match_{suffix}(value, token_classifier=token_classifier)"):
+            composer.line(f"return {the_match}")
         composer.line(f"source.error('Expected {const_name}', at=index)")
 
-    # with composer.func_def(f"parse_{suffix}", [], docstring):
-    #     composer.line(f"item = expect_{suffix}()")
-    #     composer.line(f"return item['value']")
+    if isinstance(definition, CollectionDef):
+        with composer.func_def(f"update_{suffix}_collection", ["item"], docstring):
+            composer.line(f"global {pattern}")
+            with composer.if_stmt(f"not isinstance(item, str)"):
+                composer.line(f"source.error(f\"Expected {const_name} collection item to be str, not {{clsn(item)}}\")")
 
+            with composer.if_stmt(f"item in {collection}"):
+                composer.line(f"return")
+
+            composer.line(f"{collection}.append(item)")
+            composer.line(f"pattern_items = '|'.join(reversed(sorted(typ_enumeration_collection)))")
+            composer.line(f"{pattern} = re.compile(rf'''({{pattern_items}})\\b''')")
 
 # region TOKEN
 
@@ -715,6 +753,32 @@ def compose_kinddef(kind_name: "str", kind: "KindDef"):
 
 # endregion (KIND)
 
+# region COLLECTION
+
+
+def compose_collectiondef(collection_name: "str", collection: "CollectionDef"):
+    """Composes the functions for parsing a token group definition"""
+    suffix: "str" = snakefy(collection_name)
+    const_name: "str" = suffix.upper()
+    docstring: "str" = f"Parses a {collection_name} collection"
+    # values = "|".join(collection.values)
+    # regex_str = f"'''{values}'''"
+
+    template_append(RE_CONSTANTS,
+        f"# Pattern for the {collection_name} token collection group\n"
+        f"RE_{const_name}: \"re.Pattern | None\" = None\n"
+    )
+
+    template_append(COLLECTIONS,
+        f"# {suffix} collection\n"
+        f"{suffix}_collection = []\n"
+    )
+
+    compose_def_body(collection, suffix, docstring, const_name, '', 0, None)
+
+
+# endregion (COLLECTION)
+
 # region RULE
 
 
@@ -726,6 +790,7 @@ def check_entry(entry: "NodeGroup"):
         if not ruledef.is_simple:
             source.index = entry.first.index
             source.error("Rule entry cannot start with complex rule references")
+
 
 def compose_ruledef_classification(rule_name: "str", rule: "RuleDef", suffix: "str", is_pushing: bool):
     if retroclassifier := rule.get("retroclassify"):
@@ -756,6 +821,40 @@ def compose_ruledef_classification(rule_name: "str", rule: "RuleDef", suffix: "s
         with composer.if_stmt('not just_checking'):
             composer.line(f'push_classifier("{suffix}")' if is_pushing else f'pop_classifier()')
 
+
+def compose_ruledef_entries(rule_name: "str", rule: "RuleDef"):
+    """Composes the rule entries"""
+    for i, entry in enumerate(rule.entries):
+        # check_entry(entry)
+        compose_group_entry(entry, rule, i == 0)
+        with composer.suite():
+            composer.line(f"log(False, debug3=f'Matched {rule_name} entry no.{i}')")
+
+    with composer.else_stmt():
+        with composer.if_stmt(f"just_checking"):
+            composer.line("return False")
+        composer.line(f"log(False, debug2=f'No match for {rule_name} rule')")
+        composer.line("node = None")
+
+
+def compose_ruledef_lookup(rule_name: "str", rule: "RuleDef"):
+    if name_key := rule.get("lookup"):
+        with composer.if_stmt("node"):
+            composer.line(f"lookup_name = node.get('{name_key}')")
+            composer.line(f"ref = scope_lookup(lookup_name, True)")
+            composer.line(f"log(True, debug1=f\"ref lookup for {name_key} is {{ref}}\")")
+            composer.line(f"merge(node, ref, keep_kind=True)")
+            composer.line(f"print(f\"ref lookup for {name_key} is {{ref}}\")")
+
+    elif name_key := rule.get("find"):
+        with composer.if_stmt("node"):
+            composer.line(f"lookup_name = node.get('{name_key}')")
+            composer.line(f"ref = scope_lookup(lookup_name, False)")
+            composer.line(f"log(True, debug1=f\"ref search for {name_key} is {{ref}}\")")
+            composer.line(f"merge(node, ref, keep_kind=True)")
+            composer.line(f"print(f\"ref search for {name_key} is {{ref}}\")")
+
+
 def compose_ruledef(rule_name: "str", rule: "RuleDef"):
     """Composes the functions for parsing a rule"""
     suffix: "str" = snakefy(rule_name)
@@ -779,51 +878,37 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
             composer.line(f"log(False, debug2=f'Entering {rule_name} scope')")
             composer.line(f"push_scope(just_checking, '{suffix.upper()}')")
 
-        for i, entry in enumerate(rule.entries):
-            # check_entry(entry)
-            compose_group_entry(entry, rule, i == 0)
-            with composer.suite():
-                composer.line(f"log(False, debug3=f'Matched {rule_name} entry no.{i}')")
-
-        with composer.else_stmt():
-            with composer.if_stmt(f"just_checking"):
-                composer.line("return False")
-            composer.line(f"log(False, debug2=f'No match for {rule_name} rule')")
-            composer.line("node = None")
+        compose_ruledef_entries(rule_name, rule)
 
         if scope_val := rule.get("scope"):
             composer.line(f"log(False, debug2=f'Leaving {rule_name} scope')")
             composer.line(f"pop_scope(node, '{scope_val}', just_checking)")
 
-        if name_key := rule.get("lookup"):
-            with composer.if_stmt("node"):
-                composer.line(f"lookup_name = node.get('{name_key}')")
-                composer.line(f"ref = scope_lookup(lookup_name, True)")
-                composer.line(f"log(True, debug1=f\"ref lookup for {name_key} is {{ref}}\")")
-                composer.line(f"merge(node, ref, keep_kind=True)")
-                composer.line(f"print(f\"ref lookup for {name_key} is {{ref}}\")")
+        compose_ruledef_lookup(rule_name, rule)
 
-        elif name_key := rule.get("find"):
+        if rule.has_any('declare', 'collection', 'collect') or rule.has_any_directive('deflate'):
             with composer.if_stmt("node"):
-                composer.line(f"lookup_name = node.get('{name_key}')")
-                composer.line(f"ref = scope_lookup(lookup_name, False)")
-                composer.line(f"log(True, debug1=f\"ref search for {name_key} is {{ref}}\")")
-                composer.line(f"merge(node, ref, keep_kind=True)")
-                composer.line(f"print(f\"ref search for {name_key} is {{ref}}\")")
 
-        if identifier := rule.get("declare"):
-            with composer.if_stmt("node"):
-                composer.line(f"declare('{identifier}', node, '{node_kind}')")
+                if identifier := rule.get("declare"):
+                    composer.line(f"declare('{identifier}', node, '{node_kind}')")
+
+                collection = rule.get('collection')
+                collectable = rule.get('collect')
+                if collection and collectable:
+                    name = snakefy(collection)
+                    composer.line(f"update_{name}_collection(node_lookup(node, '{collectable}', '{node_kind}'))")
+
+                elif collection or collectable:
+                    source.index = rule.index
+                    source.error("Directives 'collection:<COLLECTION_NAME>' and 'collect:<name>'")
+
+                if rule.has_directive("deflate"):
+                    composer.line("deflate(node)")
 
         if verbosity := rule.get("verbosity"):
             composer.line(f"pop_verb(True)")
 
         compose_ruledef_classification(rule_name, rule, suffix, False)
-
-        if rule.has_directive("deflate"):
-            composer.line("deflate(node)")
-        # else:
-            # print("RULE", suffix, "does not have deflate")
 
         if rule.has_key:
             if rule.has("flip"):
