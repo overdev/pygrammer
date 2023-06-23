@@ -60,7 +60,8 @@ source: "Source" = None
 
 gen_templates: dict[str, str] = {
     're_consts': '',
-    'token_collections': ''
+    'token_collections': '',
+    'imports': ''
 }
 
 start_rule: str = ''
@@ -75,6 +76,7 @@ INDENT = "    "
 
 RE_CONSTANTS = 're_consts'
 COLLECTIONS = 'token_collections'
+IMPORTS = 'imports'
 
 FS_DECORATORS = (DCR_RELFILEPATH, DCR_ABSFILEPATH, DCR_RELDIRPATH, DCR_ABSDIRPATH, DCR_ENSURERELATIVE, DCR_ENSUREABSOLUTE, DCR_LOADANDPARSE)
 
@@ -472,6 +474,8 @@ def compose_parser():
     with composer.region("imports"):
         composer.line("import sys")
         composer.template_exact(TPL_DEPENDENCIES)
+        if grammar.import_code:
+            composer.template_exact(grammar.import_code)
 
     composer.dashed_line()
 
@@ -888,7 +892,6 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         if rule.has_any('declare', 'collection', 'collect') or rule.has_any_directive('deflate'):
             with composer.if_stmt("node"):
-
                 if identifier := rule.get("declare"):
                     composer.line(f"declare('{identifier}', node, '{node_kind}')")
 
@@ -910,16 +913,16 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         compose_ruledef_classification(rule_name, rule, suffix, False)
 
-        if rule.has_key:
-            if rule.has("flip"):
-                item = rule.get("flip")
-                composer.line(
-                    f"return flipped(reduced(node, '{rule.key}'), '{item}', '{rule.key}')"
-                )
-            else:
-                composer.line(f"return reduced(node, '{rule.key}')")
-        else:
-            composer.line("return node")
+        if key := rule.get("key"):
+            composer.line(f"node = reduced(node, '{key}')")
+
+        if item := rule.get("flip"):
+            composer.line(f"node = flipped(node, '{item}', '{key}')")
+
+        if transform := rule.get("transform"):
+            composer.line(f"node = {transform}(node, node_api)")
+
+        composer.line("return node")
 
     with composer.func_def(f"expect_{suffix}", [], docstring):
         composer.line("loc = source.index")
