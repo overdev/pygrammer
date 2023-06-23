@@ -99,6 +99,7 @@ RE_RULE_NAME = r"""([A-Z][a-zA-Z]*)+"""
 RE_RULE_ATTRIB = r"""@"""
 RE_TOKEN_VALUE = r"""`(.+?)`"""
 RE_TOKEN_ITEM = r"""(?P<quote>[`'"])(.*?)(?P=quote)"""
+RE_IMPORTS_SECTION = r"(?s)(.*?)\n\.end"
 RE_DECORATOR = r"""@(\w+|[0-9])"""
 RE_EXCLUSION = r"""\^(\w+)"""
 RE_COLON = r""":"""
@@ -212,6 +213,7 @@ class GrammarNodes:
     rules: "dict[str, RuleDef]" = field(default_factory=dict)
     node_names: "list[str]" = field(default_factory=list)
     start_rule: 'RuleDef | None' = None
+    import_code: "str | None" = None
 
     def has_node(self, node: "GrammarNodeDefinition") -> "bool":
         """Returns whether the specified node is in the collection"""
@@ -457,6 +459,14 @@ def parse_section(grammar_nodes: "GrammarNodes", verbosity: "Verbosity" = ERROR)
             grammar.info(f"Section: {section_name} ({section_spec})", localized=False, as_debug=True)
 
         add_collection_definition(section_name, section_spec, grammar_nodes, index, verbosity)
+        return True
+
+    if section_name == SECTION_IMPORT:
+        if grammar_nodes.import_code:
+            grammar.error("Section .import can occur at most once.")
+        import_match = grammar.expect_regex(RE_IMPORTS_SECTION)
+        grammar_nodes.import_code = import_match[1]
+
         return True
 
     if section_name == SECTION_RULE:
