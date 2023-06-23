@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.1beta3 - 2023-06-22
+
+This beta3 pre-release is based on `feat-directives` branch, and includes:
+
+### Added
+
+- Tokenizer base implementation, which comes with the following:
+    - `classify` and `classify:dotted.value.name` directive and attribute to set the token classification.
+    - `reclassify:dotted.value.name` to reset current token classification.
+    - `retroclassify:dotted.value.name` to change the classification of previously collected tokens matching current classification, and following tokens.
+- Directives `deflate`, `join`, `update` and `keepkind`
+- `.collection: NAME` section to be used along with `collection:NAME` and `collect:name` attributes
+- `.imports:` section to be used along with `transform:callable` attribute
+
 ## 0.1beta2 - 2023-06-11
 
 Many improvements since beta1 but still there's a lot to be done. This beta2 pre-release includes:
