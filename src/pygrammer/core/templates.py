@@ -105,6 +105,7 @@ import time
 import io
 import os
 
+from typing import Any
 from pathlib import Path
 from argparse import ArgumentParser, Namespace, FileType
 from colorama import just_fix_windows_console, Fore, Back, Style
@@ -131,6 +132,7 @@ is_tokenizing = False
 
 # **COLL** #
 
+node_api = None
 """
 
 TPL_CONSTANTS = """
@@ -581,7 +583,14 @@ TPL_LOADANDPARSE = """if os.path.isfile(m_path) and os.path.exists(m_path):
 TPL_API = """
 def parse(source_fname, start_rule='{start_rule}', verbosity='error'):
     ""\"Parsers a source file and generates an abstract syntax tree of the source.\"""
-    global source
+    global source, node_api
+
+    if node_api is None:
+        node_api = NodeApi(
+            clsn, snakefy, log, reduced,
+            deflate, flipped, merge, join,
+            update, scope_lookup, node_lookup, push_verb,
+            pop_verb, append, declare)
 
     saved_cwd: str = os.getcwd()
     cwd_path = os.path.dirname(source_fname)
@@ -711,6 +720,25 @@ class GrammarParserError(Exception):
 
 class GrammarTokenizerStop(Exception):
     pass
+
+
+@dataclass
+class NodeApi:
+    clsn: Any
+    snakefy: Any
+    log: Any
+    reduced: Any
+    deflate: Any
+    flipped: Any
+    merge: Any
+    join: Any
+    update: Any
+    scope_lookup: Any
+    node_lookup: Any
+    push_verb: Any
+    pop_verb: Any
+    append: Any
+    declare: Any
 
 
 @dataclass
