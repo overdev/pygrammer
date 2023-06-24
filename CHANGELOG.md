@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `transformdefault:callable` attribute to set a default transform function to be called on every node unless its rule has another transform attribute set to it
+
+
 ## 0.1beta3 - 2023-06-22
 
 This beta3 pre-release is based on `feat-directives` branch, and includes:

@@ -24,6 +24,7 @@
     - [x] `.import .. .end` section to add import external functions to be called by the parser (to be used with the `transform:callable` attribute)
     - [x] `.collection: NAME` section to define a group of tokens whose items are collected while parsing (to be used with the `collection:NAME` and `collect:key` attributes)
     - [x] `transform:callable` attribute to perfom any desired transformation on the node before returning it from the parsing function
+    - [x] `transformdefault:callable` attribute to define a default transformation to be done on every node below the its rule
     - [x] `collection:NAME` attribute to indicate to wich node group collection the node key should be appended to
     - [x] `collect:key` attribute to indicate which `key` in the node should be collected
     - [x] `lookup:name` attribute to look up the name in the scope chain and get a _reference_ from it. The name is required to exist.
