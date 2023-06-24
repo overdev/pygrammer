@@ -130,6 +130,9 @@ token_classifiers = []
 token_stream = []
 is_tokenizing = False
 
+# default transform function
+default_transform = lambda node, api: node
+
 # **COLL** #
 
 node_api = None
