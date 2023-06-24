@@ -704,7 +704,7 @@ def compose_def_body(definition: "TokenDef | KindDef | CollectionDef", suffix: "
         composer.line(f"source.error('Expected {const_name}', at=index)")
 
     if isinstance(definition, CollectionDef):
-        with composer.func_def(f"update_{suffix}_collection", ["item"], docstring):
+        with composer.func_def(f"update_{collection}", ["item"], docstring):
             composer.line(f"global {pattern}")
             with composer.if_stmt(f"not isinstance(item, str)"):
                 composer.line(f"source.error(f\"Expected {const_name} collection item to be str, not {{clsn(item)}}\")")
@@ -713,7 +713,7 @@ def compose_def_body(definition: "TokenDef | KindDef | CollectionDef", suffix: "
                 composer.line(f"return")
 
             composer.line(f"{collection}.append(item)")
-            composer.line(f"pattern_items = '|'.join(reversed(sorted(typ_enumeration_collection)))")
+            composer.line(f"pattern_items = '|'.join(reversed(sorted({collection})))")
             composer.line(f"{pattern} = re.compile(rf'''({{pattern_items}})\\b''')")
 
 # region TOKEN
@@ -848,7 +848,6 @@ def compose_ruledef_lookup(rule_name: "str", rule: "RuleDef"):
             composer.line(f"ref = scope_lookup(lookup_name, True)")
             composer.line(f"log(True, debug1=f\"ref lookup for {name_key} is {{ref}}\")")
             composer.line(f"merge(node, ref, keep_kind=True)")
-            composer.line(f"print(f\"ref lookup for {name_key} is {{ref}}\")")
 
     elif name_key := rule.get("find"):
         with composer.if_stmt("node"):
@@ -856,8 +855,6 @@ def compose_ruledef_lookup(rule_name: "str", rule: "RuleDef"):
             composer.line(f"ref = scope_lookup(lookup_name, False)")
             composer.line(f"log(True, debug1=f\"ref search for {name_key} is {{ref}}\")")
             composer.line(f"merge(node, ref, keep_kind=True)")
-            composer.line(f"print(f\"ref search for {name_key} is {{ref}}\")")
-
 
 def compose_ruledef(rule_name: "str", rule: "RuleDef"):
     """Composes the functions for parsing a rule"""
@@ -1148,11 +1145,11 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
             else:
                 call = f"is_token(r'{val}')"
 
-        elif isinstance(ref, KindRef):
+        elif isinstance(ref, (KindRef, CollectionRef)):
             if cap_is_kind:
                 source.index = ref.index
                 source.error(f"capture name for token reference {ref.value} cannot be ALL_CAPS")
-            call = f"is_{snakefy(ref.value)}(value='')"
+            call = f"is_{snakefy(ref.value)}('')"
 
         elif isinstance(ref, RuleRef):
             if cap_is_kind:

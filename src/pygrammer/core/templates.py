@@ -357,7 +357,7 @@ def node_lookup(node, member, kind):
             log(False, debug1=f"{node['kind']}['{member}'] extracted")
             return m
         source.error(f"{kind} node has no '{member}' item")
-    source.warning(f"Fail to lookup '{member}' item: {kind} node is None")
+    log(True, debug2=f"Fail to lookup '{member}' item: {kind} node is None")
 
 def push_verb(verbosity_level, do_log=False):
     global verbosity_stack, source
