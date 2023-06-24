@@ -887,7 +887,7 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         compose_ruledef_lookup(rule_name, rule)
 
-        if rule.has_any('declare', 'collection', 'collect') or rule.has_any_directive('deflate'):
+        if rule.has_any('declare', 'collection', 'collect', 'key', 'flip', 'transform', 'transformdefault') or rule.has_any_directive('deflate'):
             with composer.if_stmt("node"):
                 if identifier := rule.get("declare"):
                     composer.line(f"declare('{identifier}', node, '{node_kind}')")
@@ -905,19 +905,21 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
                 if rule.has_directive("deflate"):
                     composer.line("deflate(node)")
 
-        if verbosity := rule.get("verbosity"):
-            composer.line(f"pop_verb(True)")
+                if key := rule.get("key"):
+                    composer.line(f"node = reduced(node, '{key}')")
+
+                if item := rule.get("flip"):
+                    composer.line(f"node = flipped(node, '{item}', '{key}')")
+
+                if transform := rule.get("transform"):
+                    composer.line(f"node = {transform}(node, node_api)")
+                else:
+                    composer.line(f"node = default_transform(node, node_api)")
 
         compose_ruledef_classification(rule_name, rule, suffix, False)
 
-        if key := rule.get("key"):
-            composer.line(f"node = reduced(node, '{key}')")
-
-        if item := rule.get("flip"):
-            composer.line(f"node = flipped(node, '{item}', '{key}')")
-
-        if transform := rule.get("transform"):
-            composer.line(f"node = {transform}(node, node_api)")
+        if verbosity := rule.get("verbosity"):
+            composer.line(f"pop_verb(True)")
 
         composer.line("return node")
 
