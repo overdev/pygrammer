@@ -204,32 +204,49 @@ def snakefy(string: str) -> 'str':
 def is_token(*regexes):
     ""\"Returns True if source in current position matches the immediate token value, or False otherwise""\"
     global source
+    if source.index == len(source.contents) - 1:
+        return False
+    index = source.index
+    source.skip()
     for regex in regexes:
         if source.is_regex(regex):
+            source.index = index
             return True
+    source.index = index
     return False
 
-def match_token(*regexes, token_classifier='any', noskip=()):
+def match_token(*regexes, token_classifier='any'):
     ""\"Tries to match an immediate token 'value' and returns its node, or None otherwise""\"
     global source
+    if source.index == len(source.contents) - 1:
+        return None
     location = source.location
+    index = source.index
+    source.skip()
     for regex in regexes:
-        if m := source.match_regex(regex, noskip=noskip):
+        if m := source.match_regex(regex):
             log(False, debug3=f"Matched token with regex ```{ regex }``` at line {location[1]}, {location[2]}: '{m[0]}'")
             token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
             grab_token(token, location)
             return token
+    source.index = index
     return None
 
-def expect_token(*regexes, token_classifier='any', noskip=()):
+def expect_token(*regexes, token_classifier='any'):
     \"""Demands the source in current position to match one of the given token values and returns its node or aborts with an error.""\"
     global source
+    if source.index == len(source.contents) - 1:
+        return None
+
     location = source.location
+    index = source.index
+    source.skip()
     for regex in regexes:
-        if m := source.expect_regex(regex, noskip=noskip):
+        if m := source.expect_regex(regex):
             token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
             grab_token(token, location)
             return token
+    source.index = index
     return None
 
 def log(localized=False, **messages):
@@ -793,30 +810,26 @@ class Source:
 TPL_SOURCE_CLASS_2 = """
             break
 
-    def expect_regex(self, regex: 'str | re.Pattern', error_message: str | None = None, noskip: 'tuple[str]' = ()) -> 're.Match':
+    def expect_regex(self, regex: 'str | re.Pattern', error_message: str | None = None) -> 're.Match':
         ""\"Tries to match regex and returns its match object. Prints an error otherwise.\"""
-        if m := self.match_regex(regex, noskip=noskip):
-            return m
+        if self.index != len(self.contents) - 1:
+            if m := self.match_regex(regex):
+                return m
         self.error(error_message or f"Expected '{regex}'")
 
-    def match_regex(self, regex: 'str | re.Pattern', advance: bool = True, skip: bool = True, noskip: 'tuple[str]' = ()) -> 're.Match | Bool | None':
+    def match_regex(self, regex: 'str | re.Pattern', advance: bool = True, skip: bool = True) -> 're.Match | Bool | None':
         ""\"Tries to match a regex, optionally consumes it and returns Match/None, otherwise a True/False.\"""
         m: 're.Match | None' = re.match(regex, self.current) if isinstance(regex, str) else regex.match(self.current)
         if m:
             if advance:
                 self.current = self.current[len(m[0]):]
-                if self.verbosity >= DEBUG3:
-                    self.info(f"Match success: {repr(regex)}", as_debug=True)
-                if skip:
-                    self.skip(*noskip)
             return m
-
-        if advance and self.verbosity >= DEBUG3:
-            self.info(f"Match fail: {repr(regex)}", as_debug=True)
         return None
 
     def is_regex(self, regex: 'str | re.Pattern') -> 'bool':
         ""\"Returns whether a regex matches.\"""
+        if self.index == len(self.contents) - 1:
+            return False
         if re.match(regex, self.current):
             return True
         return False
@@ -850,6 +863,7 @@ TPL_SOURCE_CLASS_2 = """
 
     def error(self, message: str, at: int | None = None) -> 'None':
         ""\"Aborts with an error message.\"""
+        # raise RuntimeError(message)
         self._log('ERROR', message, at_index=at, color='RED', sys_exit=True, out_file=sys.stderr)
 
     def warning(self, message: str, at: int | None = None) -> 'None':

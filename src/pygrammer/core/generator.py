@@ -662,17 +662,23 @@ def compose_def_body_decorators(definition: "TokenDef | KindDef", suffix: "str",
 def compose_def_body(definition: "TokenDef | KindDef | CollectionDef", suffix: "str", docstring: "str", const_name: "str", regex_str: "str", match_index: "int", excludes: "list[str] | None"):
     """Composes the functions for parsing tokens"""
     with composer.func_def(f"is_{suffix}", ["value=''"], docstring):
-        composer.line("location = source.location")
+        composer.line("index = source.index")
         with composer.if_stmt(f"match_{suffix}(value, False)"):
+            composer.line(f"source.index = index")
             composer.line(f"return True")
         composer.line(f"return False")
 
     pattern = f"RE_{const_name}"
     the_match = f"m_{suffix}"
     collection = f"{suffix}_collection"
-    with composer.func_def(f"match_{suffix}", ["value=''", "advance=True", f"token_classifier='{suffix}'", 'noskip=()'], docstring):
+    with composer.func_def(f"match_{suffix}", ["value=''", "advance=True", f"token_classifier='{suffix}'"], docstring):
         composer.line("location = source.location")
 
+        if isinstance(definition, TokenDef) and definition.has_decorator(DCR_SKIP):
+            composer.comment(f"Skip anything expect {const_name} tokens")
+            composer.line(f"source.skip('{const_name}')")
+        else:
+            composer.line(f"source.skip()")
         if isinstance(definition, CollectionDef):
             with composer.if_stmt(f"len({collection}) == 0"):
                 composer.line(f"return None if advance else False")
@@ -688,7 +694,7 @@ def compose_def_body(definition: "TokenDef | KindDef | CollectionDef", suffix: "
                     composer.line(f"return None if advance else False")
 
                 with composer.if_stmt("advance"):
-                    composer.line(f"m = source.expect_regex({pattern}, advance, noskip=noskip)")
+                    composer.line(f"m = source.expect_regex({pattern}, '{const_name} expected')")
                     composer.line(f"log(False, debug3=f\"\"\"Matched token {pattern} at line {{location[1]}}, {{location[2]}}: '{{m[{match_index}]}}'\"\"\")")
                     composer.line(f"token = {{ 'kind': '{const_name}', 'value': {the_match}[{match_index}], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }}")
                     composer.line(f"grab_token(token, location)")
@@ -699,9 +705,9 @@ def compose_def_body(definition: "TokenDef | KindDef | CollectionDef", suffix: "
 
         composer.line(f"return None if advance else False")
 
-    with composer.func_def(f"expect_{suffix}", ["value=''", f"token_classifier='{suffix}'", "noskip=()"], docstring):
+    with composer.func_def(f"expect_{suffix}", ["value=''", f"token_classifier='{suffix}'"], docstring):
         composer.line("index = source.index")
-        with composer.if_stmt(f"{the_match} := match_{suffix}(value, token_classifier=token_classifier, noskip=noskip)"):
+        with composer.if_stmt(f"{the_match} := match_{suffix}(value, token_classifier=token_classifier)"):
             composer.line(f"return {the_match}")
         composer.line(f"source.error('Expected {const_name}', at=index)")
 
@@ -865,9 +871,15 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
     node_kind: "str" = suffix.upper()
 
     with composer.func_def(f"is_{suffix}", [], docstring):
-        composer.line(f"return match_{suffix}(True)")
+        composer.line(f"index = source.index")
+        with composer.if_stmt(f"match_{suffix}(True)"):
+            composer.line('source.index = index')
+            composer.line('return True')
 
-    with composer.func_def(f"match_{suffix}", ['just_checking = False', 'noskip=()'], docstring):
+        composer.line('source.index = index')
+        composer.line('return False')
+
+    with composer.func_def(f"match_{suffix}", ['just_checking = False'], docstring):
         if transformdefault := rule.get('transformdefault'):
             composer.line("global default_transform")
             composer.line("saved_transform = default_transform")
@@ -877,7 +889,8 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
 
         if verbosity := rule.get("verbosity"):
             composer.line(f"push_verb('{verbosity}', True)")
-        composer.line(f"log(False, debug3=f'Testing {rule_name}:' if just_checking else f'Matching {rule_name}:')")
+        with composer.if_stmt('not just_checking'):
+            composer.line(f"log(False, info=f'Matching {rule_name}:')")
 
         composer.line(f"node = {{ 'kind': '{node_kind}' }}")
 
@@ -933,11 +946,14 @@ def compose_ruledef(rule_name: "str", rule: "RuleDef"):
         if rule.has('transformdefault'):
             composer.line("default_transform = saved_transform")
 
+        with composer.if_stmt("node"):
+            composer.line(f"log(False, success='{node_kind} node')")
+
         composer.line("return node")
 
-    with composer.func_def(f"expect_{suffix}", ['noskip=()'], docstring):
+    with composer.func_def(f"expect_{suffix}", [], docstring):
         composer.line("loc = source.index")
-        with composer.if_stmt(f"node := match_{suffix}(noskip=noskip)"):
+        with composer.if_stmt(f"node := match_{suffix}()"):
             composer.line("return node")
         composer.line(f'source.error("{node_kind} node expected.", at=loc)')
 
@@ -968,7 +984,7 @@ def compose_group_entry(group: "NodeGroup", rule: "RuleDef", first: "bool"):
         #     if isinstance(item, GrammarNodeReference):
         #         compose_reference(item, "init", supress_init_one=True)
 
-        for item in group.refs:
+        for i, item in enumerate(group.refs):
             if isinstance(item, GrammarNodeReference):
                 compose_reference(item)
 
@@ -1020,7 +1036,7 @@ def compose_group_optional(group: "NodeGroup"):
     composer.comment("Option group below")
     compose_group_entry_test(group, False)
     with composer.suite():
-        for item in group.refs:
+        for i, item in enumerate(group.refs):
             if isinstance(item, GrammarNodeReference):
                 compose_reference(item, "capture")
 
@@ -1119,9 +1135,6 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
     should_update_rule: "bool" = False
     keep_kind: "bool" = False
     has_lookup: "bool" = False
-    noskip = 'noskip=()'
-    if len(ref.noskip):
-        noskip = f'noskip={repr(ref.noskip)}'
 
     must_grab = '^' not in cap and cap != '_'
     if not must_grab:
@@ -1189,20 +1202,20 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
             if cap_is_kind:
                 kind = cap
                 cap = snakefy(cap)
-                mcall = f"match_{cap}(r'{val}', {cap_class}, {noskip})"
-                call = mcall if is_optional else f"expect_{cap}(r'{val}', {cap_class}, {noskip})"
+                mcall = f"match_{cap}(r'{val}', {cap_class})"
+                call = mcall if is_optional else f"expect_{cap}(r'{val}', {cap_class})"
             else:
                 kind = "TOKEN"
-                mcall = f"match_token(r'{val}', {cap_class}, {noskip})"
-                call = mcall if is_optional else f"expect_token(r'{val}', {cap_class}, {noskip})"
+                mcall = f"match_token(r'{val}', {cap_class})"
+                call = mcall if is_optional else f"expect_token(r'{val}', {cap_class})"
 
         elif isinstance(ref, KindRef):
             if cap_is_kind:
                 source.index = ref.index
                 source.error(f"capture name for token reference {ref.value} cannot be ALL_CAPS")
             kind = snakefy(ref.value).upper()
-            mcall = f"match_{snakefy(ref.value)}({cap_class}, {noskip})"
-            call = mcall if is_optional else f"expect_{snakefy(ref.value)}({cap_class}, {noskip})"
+            mcall = f"match_{snakefy(ref.value)}({cap_class})"
+            call = mcall if is_optional else f"expect_{snakefy(ref.value)}({cap_class})"
 
         elif isinstance(ref, RuleRef):
             if cap_is_kind:
@@ -1274,7 +1287,6 @@ def compose_reference(ref: "GrammarNodeReference", action: "str" = "capture", **
                     composer.dedent_only(2)
                 else:
                     composer.line(mcall)
-
 
 def escape_token(tkn: "str") -> "str":
     """Escapes characters that have meaning in regluar expressions"""
