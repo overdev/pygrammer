@@ -148,6 +148,11 @@ class TokenDef(GrammarNodeDefinition):
         """Gets the token definition decorators"""
         return self._decorators
 
+    def add_decorator(self, decorator: 'str'):
+        """Adds a decorator to the token definition"""
+        if decorator not in self._decorators:
+            self._decorators.append(decorator)
+
     def has_decorator(self, decorator: 'str') -> 'bool':
         """Returns whether the token definition has the specified decorator"""
         return decorator in self._decorators
@@ -389,6 +394,7 @@ class GrammarNodeReference(GrammarNode):
         self.value: 'str' = value
         self.count: 'NodeCount' = count
         self.capture: 'str' = '_'
+        self.noskip: Sequence[str] = []
         self._index = source_index
 
     def __str__(self) -> 'str':
@@ -403,6 +409,9 @@ class GrammarNodeReference(GrammarNode):
     def has_capture(self) -> 'bool':
         """Gets whether this node has defined a capture name"""
         return self.capture != '_'
+
+    def do_not_skip(self, skippable: str):
+        self.noskip.append(skippable)
 
 
 class TokenRef(GrammarNodeReference):

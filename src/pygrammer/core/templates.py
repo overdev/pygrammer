@@ -209,24 +209,24 @@ def is_token(*regexes):
             return True
     return False
 
-def match_token(*regexes, token_classifier='any'):
+def match_token(*regexes, token_classifier='any', noskip=()):
     ""\"Tries to match an immediate token 'value' and returns its node, or None otherwise""\"
     global source
     location = source.location
     for regex in regexes:
-        if m := source.match_regex(regex):
+        if m := source.match_regex(regex, noskip=noskip):
             log(False, debug3=f"Matched token with regex ```{ regex }``` at line {location[1]}, {location[2]}: '{m[0]}'")
             token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
             grab_token(token, location)
             return token
     return None
 
-def expect_token(*regexes, token_classifier='any'):
+def expect_token(*regexes, token_classifier='any', noskip=()):
     \"""Demands the source in current position to match one of the given token values and returns its node or aborts with an error.""\"
     global source
     location = source.location
     for regex in regexes:
-        if m := source.expect_regex(regex):
+        if m := source.expect_regex(regex, noskip=noskip):
             token = { 'kind': 'TOKEN', 'value': m[0], 'lc': [ location[1], location[2] ], 'classifier': classify(token_classifier) }
             grab_token(token, location)
             return token
@@ -577,14 +577,15 @@ TPL_ENSUREABSOLUTE = """if not os.path.isabs(m_path):
 TPL_LOADANDPARSE = """if os.path.isfile(m_path) and os.path.exists(m_path):
     spath = os.path.abspath(os.path.normpath(m_path))
     try:
-        parse(spath)
+        parse_from_file(spath)
     except Exception as e:
         log(True, error=f"Unable to parse file: {', '.join(str(arg) for arg in e.args)}")
 """
 
 
 TPL_API = """
-def parse(source_fname, start_rule='{start_rule}', verbosity='error'):
+
+def parse_from_string(source_string, start_rule='{start_rule}', verbosity='error', ast_entry='<source>'):
     ""\"Parsers a source file and generates an abstract syntax tree of the source.\"""
     global source, node_api
 
@@ -595,6 +596,48 @@ def parse(source_fname, start_rule='{start_rule}', verbosity='error'):
             update, scope_lookup, node_lookup, push_verb,
             pop_verb, append, declare)
 
+    if ast_entry not in abstract_syntax_tree:
+
+        abstract_syntax_tree[ast_entry] = {{ 'kind': 'CURRENTLY_PARSING' }}
+
+        message = f"Started parsing file {{ast_entry}}"
+        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
+
+        main_rule = f'match_{{snakefy(start_rule)}}'
+        rule_callback = globals().get(main_rule, lambda: {{ 'kind': 'NO_AST', 'message': f'{start_rule} not defined' }})
+
+        saved_source = source
+        kept_verb: str = saved_source.verbosity.name.lower() if saved_source else verbosity
+        source = Source(source_string, source_string, ast_entry, VERB_LEVELS.get(kept_verb, ERROR))
+        source.skip()
+
+        ptime = time.process_time()
+        ast = rule_callback()
+        delta = time.process_time() - ptime
+
+        abstract_syntax_tree[ast_entry] = ast
+
+        source = saved_source
+
+        message = f"Finished parsing file {{ast_entry}} (took {{delta:.4f}} seconds)"
+        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
+
+    else:
+        ast = abstract_syntax_tree.get(ast_entry)
+        if ast.get('kind', '') == 'CURRENTLY_PARSING':
+            message = f"Cyclic reference detected in {{ast_entry}}"
+            header = f"{{Fore.BLACK}}{{Back.YELLOW}}WARNING: {{Style.BRIGHT}}{{Fore.YELLOW}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+            print(header)
+
+        message = f"File {{ast_entry}} was previously parsed. Skipping..."
+        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
+        print(header)
+
+def parse_from_file(source_fname, start_rule='{start_rule}', verbosity='error'):
+    ""\"Parsers a source file and generates an abstract syntax tree of the source.\"""
+
     saved_cwd: str = os.getcwd()
     cwd_path = os.path.dirname(source_fname)
     cwf_path = os.path.basename(source_fname)
@@ -603,51 +646,18 @@ def parse(source_fname, start_rule='{start_rule}', verbosity='error'):
 
     if abspath not in abstract_syntax_tree:
 
-        abstract_syntax_tree[abspath] = {{ 'kind': 'CURRENTLY_PARSING' }}
-
-        message = f"Started parsing file {{source_fname}}"
-        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
-        print(header)
-
-        main_rule = f'match_{{snakefy(start_rule)}}'
-        rule_callback = globals().get(main_rule, lambda: {{ 'kind': 'NO_AST', 'message': f'{start_rule} not defined' }})
-
         with open(cwf_path, 'r', encoding='utf8') as fp:
             source_contents = fp.read()
 
-        saved_source = source
-        kept_verb: str = saved_source.verbosity.name.lower() if saved_source else verbosity
-        source = Source(source_contents, source_contents, source_fname, VERB_LEVELS.get(kept_verb, ERROR))
-        source.skip()
+        parse_from_string(source_contents, start_rule, verbosity, abspath)
 
-        ptime = time.process_time()
-        ast = rule_callback()
-        delta = time.process_time() - ptime
+    os.chdir(saved_cwd)
 
-        abstract_syntax_tree[abspath] = ast
-
-        source = saved_source
-        os.chdir(saved_cwd)
-
-        message = f"Finished parsing file {{source_fname}} (took {{delta:.4f}} seconds)"
-        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
-        print(header)
-
-    else:
-        ast = abstract_syntax_tree.get(abspath)
-        if ast.get('kind', '') == 'CURRENTLY_PARSING':
-            message = f"Cyclic reference detected in {{source_fname}}"
-            header = f"{{Fore.BLACK}}{{Back.YELLOW}}WARNING: {{Style.BRIGHT}}{{Fore.YELLOW}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
-            print(header)
-
-        message = f"File {{source_fname}} was previously parsed. Skipping..."
-        header = f"{{Fore.BLACK}}{{Back.CYAN}}INFO: {{Style.BRIGHT}}{{Fore.CYAN}}{{Back.BLACK}} {{message}}{{Style.RESET_ALL}}"
-        print(header)
 
 def generate_ast(source_fname, start_rule='{start_rule}', verbosity='error'):
     \"""Parses the source file and returns its AST""\"
     global abstract_syntax_tree
-    parse(source_fname, start_rule, verbosity)
+    parse_from_file(source_fname, start_rule, verbosity)
 
     return abstract_syntax_tree
 
@@ -657,7 +667,7 @@ def generate_stream(source_fname, start_rule='{start_rule}', verbosity='error'):
 
     is_tokenizing = True
     try:
-        parse(source_fname, start_rule, verbosity)
+        parse_from_file(source_fname, start_rule, verbosity)
     except GrammarTokenizerStop:
         pass
 
@@ -676,7 +686,7 @@ parser.add_argument('-t', '--tokenize', help="Generates a stream of tokens inste
 args: Namespace = parser.parse_args()
 
 abspath = os.path.abspath(os.path.normpath(args.source.name))
-parse(abspath, args.start, args.verbosity)
+parse_from_file(abspath, args.start, args.verbosity)
 
 if args.tokenize:
     try:
@@ -773,20 +783,23 @@ class Source:
         ind = max(0, min(value, len(self.contents) - 1))
         self.current = self.contents[ind:]
 
-    def skip(self):
+    def skip(self, *noskip):
         ""\"Skip over whitespace and comments\"""
-        while True:"""
+        idx = self.index
+        while True:
+            if self.index == len(self.contents) - 1:
+                break"""
 
 TPL_SOURCE_CLASS_2 = """
             break
 
-    def expect_regex(self, regex: 'str | re.Pattern', error_message: str | None = None) -> 're.Match':
+    def expect_regex(self, regex: 'str | re.Pattern', error_message: str | None = None, noskip: 'tuple[str]' = ()) -> 're.Match':
         ""\"Tries to match regex and returns its match object. Prints an error otherwise.\"""
-        if m := self.match_regex(regex):
+        if m := self.match_regex(regex, noskip=noskip):
             return m
         self.error(error_message or f"Expected '{regex}'")
 
-    def match_regex(self, regex: 'str | re.Pattern', advance: bool = True, skip: bool = True) -> 're.Match | Bool | None':
+    def match_regex(self, regex: 'str | re.Pattern', advance: bool = True, skip: bool = True, noskip: 'tuple[str]' = ()) -> 're.Match | Bool | None':
         ""\"Tries to match a regex, optionally consumes it and returns Match/None, otherwise a True/False.\"""
         m: 're.Match | None' = re.match(regex, self.current) if isinstance(regex, str) else regex.match(self.current)
         if m:
@@ -795,7 +808,7 @@ TPL_SOURCE_CLASS_2 = """
                 if self.verbosity >= DEBUG3:
                     self.info(f"Match success: {repr(regex)}", as_debug=True)
                 if skip:
-                    self.skip()
+                    self.skip(*noskip)
             return m
 
         if advance and self.verbosity >= DEBUG3:
