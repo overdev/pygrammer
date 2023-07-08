@@ -734,7 +734,7 @@ def parse_rule_entry(grammar_nodes: "GrammarNodes", rule: "RuleDef", entry: "Nod
             if verbosity >= DEBUG2:
                 grammar.info("Entered inline Group", localized=False, as_debug=True)
 
-            previous_ref = parse_inline_group(inline_group, RE_CLOSE_PAREN_GROUP, previous_ref)
+            previous_ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_PAREN_GROUP, previous_ref)
 
             if inline_group.mode is GM_SEQUENTIAL and inline_group.count is NC_ONE:
                 grammar.warning("Redundant grouping")
@@ -751,7 +751,7 @@ def parse_rule_entry(grammar_nodes: "GrammarNodes", rule: "RuleDef", entry: "Nod
             if verbosity >= DEBUG2:
                 grammar.info("Entered inline optional Group", localized=False, as_debug=True)
 
-            previous_ref = parse_inline_group(inline_group, RE_CLOSE_BRACKET, previous_ref)
+            previous_ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_BRACKET, previous_ref)
 
             if verbosity >= DEBUG2:
                 grammar.info("Exited inline optional Group", localized=False, as_debug=True)
@@ -848,7 +848,7 @@ def assign_group_captures(group: "NodeGroup", captures: "str | list[str]", verbo
             grammar.info(f"Node ref: `{ref}`, assigned: `{cap}`", localized=False, as_debug=True)
 
 
-def parse_inline_group(group: "NodeGroup", re_close_brace: "str", previous_ref: "GrammarNodeReference", verbosity: "Verbosity" = ERROR) -> 'GrammarNodeReference | None':
+def parse_inline_group(grammar_nodes: "GrammarNodes", group: "NodeGroup", re_close_brace: "str", previous_ref: "GrammarNodeReference", verbosity: "Verbosity" = ERROR) -> 'GrammarNodeReference | None':
     """Parses an inline group of node references"""
     initial_mode: "GroupMode" = group.mode
     initial_count: "NodeCount" = group.count
@@ -929,7 +929,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", previous_ref: 
                 grammar.error(ERR_EXPECTED_PIPE, index)
 
             inline_group: "NodeGroup" = NodeGroup(GM_SEQUENTIAL, NC_ONE)
-            ref = parse_inline_group(inline_group, RE_CLOSE_PAREN_GROUP, previous_ref)
+            ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_PAREN_GROUP, previous_ref)
 
             if inline_group.mode is GM_SEQUENTIAL and inline_group.count is NC_ONE:
                 grammar.warning("Redundant grouping")
@@ -947,7 +947,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", previous_ref: 
                 grammar.error(ERR_EXPECTED_PIPE, index)
 
             inline_group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
-            ref = parse_inline_group(inline_group, RE_CLOSE_BRACKET, previous_ref)
+            ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_BRACKET, previous_ref)
             refs.append(inline_group)
             if is_alternative:
                 expects_pipe = True
