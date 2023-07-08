@@ -51,6 +51,7 @@ __all__ = [
     "DCR_LINECOMMENT",
     "DCR_BLOCKCOMMENT",
     "DCR_SKIP",
+    "DCR_FORCE_GENERATOR",
     "DCR_EXPAND",
     "DCR_GRABTOKEN",
     "DCR_INTERNAL",
@@ -137,6 +138,7 @@ DCR_WHITESPACE = "whitespace"
 DCR_LINECOMMENT = "linecomment"
 DCR_BLOCKCOMMENT = "blockcomment"
 DCR_SKIP = "skip"
+DCR_FORCE_GENERATOR = "forcegenerator"
 DCR_EXPAND = "expand"
 DCR_INTERNAL = "internal"
 DCR_GETTER = "getter"
@@ -154,6 +156,7 @@ DECORATORS = [
     DCR_LINECOMMENT,
     DCR_BLOCKCOMMENT,
     DCR_SKIP,
+    DCR_FORCE_GENERATOR,
     DCR_EXPAND,
     DCR_INTERNAL,
     DCR_GETTER,
@@ -655,7 +658,7 @@ def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity"
             index = grammar.index
             entry: "NodeGroup" = rule_definition.add_entry("node")
             entry.index = index
-            starts_with_rule: "bool" = parse_rule_entry(rule_definition, entry, rule_definition.node, verbosity)
+            starts_with_rule: "bool" = parse_rule_entry(grammar_nodes, rule_definition, entry, rule_definition.node, verbosity)
 
             if starts_with_rule:
                 can_be_nested = False
@@ -664,7 +667,7 @@ def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity"
                 index = grammar.index
                 entry = rule_definition.add_entry("node")
                 entry.index = index
-                starts_with_rule = parse_rule_entry(rule_definition, entry, rule_definition.node, verbosity)
+                starts_with_rule = parse_rule_entry(grammar_nodes, rule_definition, entry, rule_definition.node, verbosity)
 
                 if starts_with_rule:
                     can_be_nested = False
@@ -683,12 +686,21 @@ def parse_rule_definitions(grammar_nodes: "GrammarNodes", verbosity: "Verbosity"
         break
 
 
-def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], verbosity: "Verbosity" = ERROR) -> "bool":
+def parse_noskip(grammar_nodes: "GrammarNodes", ref_name: "str", previous_ref: "GrammarNodeReference"):
+    if token_def := grammar_nodes.tokens.get(ref_name):
+        if token_def.has_decorator(DCR_SKIP):
+            if previous_ref is not None:
+                previous_ref.do_not_skip(ref_name)
+            token_def.add_decorator(DCR_FORCE_GENERATOR)
+
+
+def parse_rule_entry(grammar_nodes: "GrammarNodes", rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], verbosity: "Verbosity" = ERROR) -> "bool":
     """Parses the rule definition(s)"""
     ref: GrammarNodeReference | NodeGroup
     refs: "Sequence[GrammarNodeReference | NodeGroup]" = []
     index: "int" = grammar.index
     starts_with_rule: "bool" = False
+    previous_ref: GrammarNodeReference | None = None
 
     while True:
         index = grammar.index
@@ -696,12 +708,15 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
         if match_item := grammar.match_regex(RE_TOKEN_INSTANCE):
             ref = TokenRef(match_item[2], source_index=index)
             refs.append(ref)
+            previous_ref = ref
             continue
 
         if match_item := grammar.match_regex(RE_KIND_INSTANCE):
             cnt = COUNT_MAP.get(match_item[2], NC_ONE)
             ref = KindRef(match_item[1], count=cnt, source_index=index)
             refs.append(ref)
+            parse_noskip(grammar_nodes, match_item[1], previous_ref)
+            previous_ref = ref
             continue
 
         if match_item := grammar.match_regex(RE_RULE_INSTANCE):
@@ -710,6 +725,7 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
             if len(refs) == 0:
                 starts_with_rule = True
             refs.append(ref)
+            previous_ref = ref
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_PAREN):
@@ -718,7 +734,7 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
             if verbosity >= DEBUG2:
                 grammar.info("Entered inline Group", localized=False, as_debug=True)
 
-            parse_inline_group(inline_group, RE_CLOSE_PAREN_GROUP)
+            previous_ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_PAREN_GROUP, previous_ref)
 
             if inline_group.mode is GM_SEQUENTIAL and inline_group.count is NC_ONE:
                 grammar.warning("Redundant grouping")
@@ -735,7 +751,7 @@ def parse_rule_entry(rule: "RuleDef", entry: "NodeGroup", node: dict[str, Any], 
             if verbosity >= DEBUG2:
                 grammar.info("Entered inline optional Group", localized=False, as_debug=True)
 
-            parse_inline_group(inline_group, RE_CLOSE_BRACKET)
+            previous_ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_BRACKET, previous_ref)
 
             if verbosity >= DEBUG2:
                 grammar.info("Exited inline optional Group", localized=False, as_debug=True)
@@ -832,7 +848,7 @@ def assign_group_captures(group: "NodeGroup", captures: "str | list[str]", verbo
             grammar.info(f"Node ref: `{ref}`, assigned: `{cap}`", localized=False, as_debug=True)
 
 
-def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Verbosity" = ERROR):
+def parse_inline_group(grammar_nodes: "GrammarNodes", group: "NodeGroup", re_close_brace: "str", previous_ref: "GrammarNodeReference", verbosity: "Verbosity" = ERROR) -> 'GrammarNodeReference | None':
     """Parses an inline group of node references"""
     initial_mode: "GroupMode" = group.mode
     initial_count: "NodeCount" = group.count
@@ -841,7 +857,8 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
     expects_pipe: "bool" = False
     has_rule: "bool" = False
     refs: "Sequence[GrammarNodeReference | NodeGroup]" = []
-    ref: "GrammarNodeReference | NodeGroup"
+    ref: "GrammarNodeReference | NodeGroup" = previous_ref
+    first_ref = previous_ref
 
     while True:
         index = grammar.index
@@ -856,6 +873,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             elif can_be_alternative:
                 if len(refs) == 1:
                     is_alternative = True
+                    previous_ref = first_ref
                     expects_pipe = False
                     group.mode = GM_ALTERNATIVE
                     continue
@@ -872,6 +890,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             refs.append(ref)
             if is_alternative:
                 expects_pipe = True
+            previous_ref = ref
 
             continue
 
@@ -884,6 +903,9 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             refs.append(ref)
             if is_alternative:
                 expects_pipe = True
+            else:
+                parse_noskip(grammar_nodes, match_item[1], previous_ref)
+                previous_ref = ref
 
             continue
 
@@ -898,6 +920,8 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             has_rule = True
             if is_alternative:
                 expects_pipe = True
+            else:
+                previous_ref = ref
             continue
 
         if match_item := grammar.match_regex(RE_OPEN_PAREN):
@@ -905,7 +929,7 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
                 grammar.error(ERR_EXPECTED_PIPE, index)
 
             inline_group: "NodeGroup" = NodeGroup(GM_SEQUENTIAL, NC_ONE)
-            parse_inline_group(inline_group, RE_CLOSE_PAREN_GROUP)
+            ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_PAREN_GROUP, previous_ref)
 
             if inline_group.mode is GM_SEQUENTIAL and inline_group.count is NC_ONE:
                 grammar.warning("Redundant grouping")
@@ -913,6 +937,8 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
             refs.append(inline_group)
             if is_alternative:
                 expects_pipe = True
+            else:
+                previous_ref = ref
 
             continue
 
@@ -921,10 +947,12 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
                 grammar.error(ERR_EXPECTED_PIPE, index)
 
             inline_group: "NodeGroup" = NodeGroup(GM_OPTIONAL, NC_ONE)
-            parse_inline_group(inline_group, RE_CLOSE_BRACKET)
+            ref = parse_inline_group(grammar_nodes, inline_group, RE_CLOSE_BRACKET, previous_ref)
             refs.append(inline_group)
             if is_alternative:
                 expects_pipe = True
+            else:
+                previous_ref = ref
 
             continue
         break
@@ -936,5 +964,6 @@ def parse_inline_group(group: "NodeGroup", re_close_brace: "str", verbosity: "Ve
     for ref in refs:
         group.add_item(ref, "_")
 
+    return previous_ref
 
 # endregion (functions)
